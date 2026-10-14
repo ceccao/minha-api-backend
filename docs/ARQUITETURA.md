@@ -24,7 +24,7 @@ CrossCutting   |
 
 ## Fluxo de uma escrita
 
-`Controller` → `ProdutoService` (Application: valida o `ProdutoRequest`, abre a transação) → `ProdutosService` (Domain: regra de negócio) → `IProdutoRepository` (Infra: `SaveChangesAsync`) → commit no `IUnitOfWork`.
+`Controller` → `ProdutoService` (Application: valida o `ProdutoRequest`, abre a transação) → `ProdutoDomainService` (Domain: regra de negócio) → `IProdutoRepository` (Infra: só marca a mudança no DbContext) → `IUnitOfWork.CommitAsync` (grava com `SaveChangesAsync` e confirma a transação).
 
 Erros: `AppException` (404, 400, 409…) viram `ProblemDetails` no `ExceptionMiddleware`. Qualquer outra exceção vira 500 com mensagem genérica fora de Development.
 

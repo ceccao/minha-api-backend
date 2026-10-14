@@ -3,7 +3,7 @@ using MinhaApi.Domain.Produtos.Entities;
 
 namespace MinhaApi.Domain.Produtos.Services.Interfaces;
 
-public interface IProdutosService
+public interface IProdutoDomainService
 {
     Task<Produto> ValidarAsync(int id, CancellationToken cancellationToken);
     Task<Produto> InserirAsync(ProdutoCommand command, CancellationToken cancellationToken);

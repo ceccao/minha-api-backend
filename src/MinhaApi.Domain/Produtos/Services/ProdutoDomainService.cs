@@ -6,7 +6,7 @@ using MinhaApi.Domain.Produtos.Services.Interfaces;
 
 namespace MinhaApi.Domain.Produtos.Services;
 
-public class ProdutosService(IProdutoRepository produtoRepository) : IProdutosService
+public class ProdutoDomainService(IProdutoRepository produtoRepository) : IProdutoDomainService
 {
     public async Task<Produto> ValidarAsync(int id, CancellationToken cancellationToken)
     {
