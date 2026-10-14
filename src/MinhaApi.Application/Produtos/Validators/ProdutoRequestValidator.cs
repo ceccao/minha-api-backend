@@ -3,9 +3,9 @@ using MinhaApi.Application.Produtos.DataTransfer.Requests;
 
 namespace MinhaApi.Application.Produtos.Validators;
 
-public class AtualizarProdutoRequestValidator : AbstractValidator<ProdutoRequest>
+public class ProdutoRequestValidator : AbstractValidator<ProdutoRequest>
 {
-    public AtualizarProdutoRequestValidator()
+    public ProdutoRequestValidator()
     {
         RuleFor(x => x.Nome)
             .NotEmpty().WithMessage("Nome é obrigatório.")

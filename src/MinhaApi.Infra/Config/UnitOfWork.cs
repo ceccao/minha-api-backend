@@ -1,15 +1,15 @@
+using Microsoft.EntityFrameworkCore.Storage;
 using MinhaApi.Domain.Abstractions;
-using NHibernate;
 
 namespace MinhaApi.Infra.Config;
 
-public class UnitOfWork(ISession session) : IUnitOfWork
+public class UnitOfWork(MinhaApiDbContext context) : IUnitOfWork
 {
-    private ITransaction? _transacao;
+    private IDbContextTransaction? _transacao;
 
     public void BeginTransaction()
     {
-        _transacao = session.BeginTransaction();
+        _transacao = context.Database.BeginTransaction();
     }
 
     public async Task CommitAsync(CancellationToken cancellationToken = default)
@@ -20,6 +20,7 @@ public class UnitOfWork(ISession session) : IUnitOfWork
         }
 
         await _transacao.CommitAsync(cancellationToken);
+        await _transacao.DisposeAsync();
         _transacao = null;
     }
 
@@ -31,6 +32,7 @@ public class UnitOfWork(ISession session) : IUnitOfWork
         }
 
         await _transacao.RollbackAsync(cancellationToken);
+        await _transacao.DisposeAsync();
         _transacao = null;
     }
 }

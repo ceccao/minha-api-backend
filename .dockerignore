@@ -1,0 +1,12 @@
+**/bin/
+**/obj/
+.git/
+.vs/
+.idea/
+tests/
+docs/
+dump-codigo.txt
+**/appsettings.Development.json
+**/appsettings.Local.json
+.env
+.env.local

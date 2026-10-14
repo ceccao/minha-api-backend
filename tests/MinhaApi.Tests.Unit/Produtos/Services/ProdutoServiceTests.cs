@@ -1,6 +1,7 @@
 using AwesomeAssertions;
 using MinhaApi.Application.Produtos.DataTransfer.Requests;
 using MinhaApi.Application.Produtos.Services;
+using MinhaApi.Application.Produtos.Validators;
 using MinhaApi.CrossCutting.Exceptions;
 using MinhaApi.Domain.Abstractions;
 using MinhaApi.Domain.Produtos.Commands;
@@ -23,7 +24,7 @@ public class ProdutoServiceTests
 
     public ProdutoServiceTests()
     {
-        _sut = new ProdutoService(_produtosService, _produtoRepository, _unitOfWork);
+        _sut = new ProdutoService(_produtosService, _produtoRepository, _unitOfWork, new ProdutoRequestValidator());
     }
 
     [Fact]
@@ -83,11 +84,7 @@ public class ProdutoServiceTests
     [Fact]
     public async Task InserirAsyncQuandoDomainServiceLancaExceptionDeveFazerRollbackERepropagar()
     {
-        // Sem FluentValidation injetado na Service, quem valida hoje e so a entidade
-        // (SetNome/SetPreco lancando ArgumentException) - vale registrar que isso
-        // significa 500 em vez de 400 pro cliente (ArgumentException nao e AppException),
-        // ate essa camada de validacao ser reintroduzida.
-        var request = new ProdutoRequest { Nome = "ab", Preco = 350m };
+        var request = new ProdutoRequest { Nome = "Teclado", Preco = 350m };
         _produtosService.InserirAsync(Arg.Any<ProdutoCommand>(), Arg.Any<CancellationToken>())
             .Throws(new ArgumentException("Nome deve ter no mínimo 3 e máximo 100 caracteres."));
 
@@ -147,5 +144,31 @@ public class ProdutoServiceTests
         var acao = async () => await _sut.ExcluirAsync(99, CancellationToken.None);
 
         await acao.Should().ThrowAsync<NaoEncontradoException<Produto>>();
+    }
+
+    [Theory]
+    [InlineData("", 10)]
+    [InlineData("ab", 10)]
+    [InlineData("Produto valido", -1)]
+    public async Task InserirAsyncComRequestInvalidoDeveLancarEntidadeInvalidaSemTocarNoDomain(string nome, decimal preco)
+    {
+        var request = new ProdutoRequest { Nome = nome, Preco = preco };
+
+        var acao = async () => await _sut.InserirAsync(request, CancellationToken.None);
+
+        await acao.Should().ThrowAsync<EntidadeInvalidaException>();
+        await _produtosService.DidNotReceive().InserirAsync(Arg.Any<ProdutoCommand>(), Arg.Any<CancellationToken>());
+        await _unitOfWork.DidNotReceive().CommitAsync(Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task EditarAsyncComRequestInvalidoDeveLancarEntidadeInvalidaSemTocarNoDomain()
+    {
+        var request = new ProdutoRequest { Nome = "", Preco = 10m };
+
+        var acao = async () => await _sut.EditarAsync(1, request, CancellationToken.None);
+
+        await acao.Should().ThrowAsync<EntidadeInvalidaException>();
+        await _produtosService.DidNotReceive().EditarAsync(Arg.Any<int>(), Arg.Any<ProdutoCommand>(), Arg.Any<CancellationToken>());
     }
 }

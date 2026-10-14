@@ -28,9 +28,9 @@ public partial class ExceptionMiddleware(RequestDelegate next, ILogger<Exception
 
     private async Task HandleExceptionAsync(HttpContext context, Exception exception)
     {
-        // StaleObjectStateException do NHibernate (concorrencia otimista) agora e
-        // traduzida em ConflitoException direto no RepositorioBase (Infra) - o
-        // CrossCutting nao precisa mais conhecer o NHibernate pra tratar isso.
+        // DbUpdateConcurrencyException do EF Core (concorrencia otimista) e
+        // traduzida em ConflitoException direto no RepositorioBase (Infra) -
+        // CrossCutting nao precisa conhecer o ORM pra tratar isso.
         var statusCode = exception switch
         {
             AppException appException => appException.StatusCode,
@@ -51,7 +51,7 @@ public partial class ExceptionMiddleware(RequestDelegate next, ILogger<Exception
         var problemDetails = new ProblemDetails
         {
             Status = statusCode,
-            Title = exception.Message,
+            Title = MensagemPublica(exception),
         };
         problemDetails.Extensions["traceId"] = context.TraceIdentifier;
 
@@ -72,6 +72,13 @@ public partial class ExceptionMiddleware(RequestDelegate next, ILogger<Exception
 
         await context.Response.WriteAsync(JsonSerializer.Serialize(problemDetails, JsonOptions));
     }
+
+    // AppException.Message e pensada para ser publica. Qualquer outro erro so mostra a
+    // mensagem real em Development; fora dele a resposta e generica (README §6.3).
+    private string MensagemPublica(Exception exception)
+        => exception is AppException || environment.IsDevelopment()
+            ? exception.Message
+            : "Ocorreu um erro interno. Informe o traceId ao suporte.";
 
     [LoggerMessage(Level = LogLevel.Warning, Message = "Erro de negocio tratado: {Message}")]
     private static partial void LogErroDeNegocio(ILogger logger, string message, Exception exception);

@@ -1,4 +1,4 @@
-﻿namespace MinhaApi.Tests.Integration;
+namespace MinhaApi.Tests.Integration;
 
 public class UnitTest1
 {

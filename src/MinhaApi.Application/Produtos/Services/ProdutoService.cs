@@ -1,7 +1,9 @@
+using FluentValidation;
 using Mapster;
 using MinhaApi.Application.Produtos.DataTransfer.Requests;
 using MinhaApi.Application.Produtos.DataTransfer.Responses;
 using MinhaApi.Application.Produtos.Services.Interfaces;
+using MinhaApi.CrossCutting.Exceptions;
 using MinhaApi.Domain.Abstractions;
 using MinhaApi.Domain.Produtos.Commands;
 using MinhaApi.Domain.Produtos.Entities;
@@ -14,7 +16,8 @@ namespace MinhaApi.Application.Produtos.Services;
 public class ProdutoService(
                             IProdutosService produtosService,
                             IProdutoRepository produtoRepository,
-                            IUnitOfWork unitOfWork) : IProdutoService
+                            IUnitOfWork unitOfWork,
+                            IValidator<ProdutoRequest> validator) : IProdutoService
 {
     public async Task<ProdutoResponse> RecuperarAsync(int id, CancellationToken cancellationToken)
     {
@@ -42,6 +45,7 @@ public class ProdutoService(
     {
         try
         {
+            await ValidarRequestAsync(request, cancellationToken);
             ProdutoCommand command = request.Adapt<ProdutoCommand>();
             unitOfWork.BeginTransaction();
             Produto produto = await produtosService.InserirAsync(command, cancellationToken);
@@ -60,6 +64,7 @@ public class ProdutoService(
     {
         try
         {
+            await ValidarRequestAsync(request, cancellationToken);
             ProdutoCommand command = request.Adapt<ProdutoCommand>();
             unitOfWork.BeginTransaction();
             Produto produto = await produtosService.EditarAsync(id, command, cancellationToken);
@@ -76,7 +81,7 @@ public class ProdutoService(
 
     public async Task<ProdutoResponse> ExcluirAsync(int id, CancellationToken cancellationToken)
     {
-       try
+        try
         {
             unitOfWork.BeginTransaction();
             Produto produto = await produtosService.InativarAsync(id, cancellationToken);
@@ -88,6 +93,18 @@ public class ProdutoService(
         {
             await unitOfWork.RollbackAsync(cancellationToken);
             throw;
+        }
+    }
+
+    // Validacao explicita (FluentValidation.AspNetCore foi descontinuado): o erro vira
+    // EntidadeInvalidaException e passa pelo mesmo ExceptionMiddleware (400).
+    private async Task ValidarRequestAsync(ProdutoRequest request, CancellationToken cancellationToken)
+    {
+        var resultado = await validator.ValidateAsync(request, cancellationToken);
+
+        if (!resultado.IsValid)
+        {
+            throw new EntidadeInvalidaException(resultado.Errors.Select(e => e.ErrorMessage));
         }
     }
 }

@@ -25,7 +25,7 @@ public class Produto
         if (string.IsNullOrWhiteSpace(nome))
             throw new ArgumentException("Nome do produto é obrigatório.", nameof(nome));
 
-        if (nome.Length < 3 || nome.Length > 100)
+        if (nome.Length is < 3 or > 100)
             throw new ArgumentException("Nome deve ter no mínimo 3 e máximo 100 caracteres.", nameof(nome));
 
         Nome = nome;

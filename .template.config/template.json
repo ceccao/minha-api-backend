@@ -1,0 +1,30 @@
+{
+  "$schema": "http://json.schemastore.org/template",
+  "author": "Ceccon",
+  "classifications": [ "Web", "API", "Clean Architecture" ],
+  "identity": "Ceccon.ApiTemplate",
+  "name": "API Base Template Backend (camadas + EF Core + MySQL)",
+  "shortName": "cecconapi",
+  "sourceName": "MinhaApi",
+  "preferNameDirectory": true,
+  "symbols": {
+    "UserSecretsId": {
+      "type": "generated",
+      "generator": "guid",
+      "replaces": "c5d120d5-d415-431c-80d5-2f5e53938ec2",
+      "parameters": { "defaultFormat": "d" }
+    }
+  },
+  "sources": [
+    {
+      "modifiers": [
+        {
+          "exclude": [
+            "**/bin/**", "**/obj/**", ".git/**", ".vs/**", ".idea/**",
+            "dump-codigo.txt", "gerar-dump.ps1", "docs/PLANO-DE-ACAO.md"
+          ]
+        }
+      ]
+    }
+  ]
+}

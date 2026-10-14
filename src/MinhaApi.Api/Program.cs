@@ -14,7 +14,7 @@ builder.Host.UseSerilog(SerilogConfiguration.Configurar);
 builder.Services.AddIoC(builder.Configuration);
 
 // Captive Dependency (README §7.6): valida em desenvolvimento que nenhum Singleton
-// esta capturando algo Scoped (como ISession) - isso quebraria em producao de um
+// esta capturando algo Scoped (como o DbContext) - isso quebraria em producao de um
 // jeito sutil, sem erro de compilacao.
 builder.Host.UseDefaultServiceProvider((ctx, opts) =>
 {
@@ -90,7 +90,7 @@ app.UseRateLimiter();
 // 17. UseAuthentication + UseAuthorization -> FASE 17 (JWT)
 
 // 18. MapControllers + MapHealthChecks
-app.MapControllers();
+app.MapControllers().RequireRateLimiting(RateLimitConfiguration.PoliticaPadrao);
 app.MapHealthChecks("/health");
 
 // 19. Swagger UI -> SOMENTE se IsDevelopment()

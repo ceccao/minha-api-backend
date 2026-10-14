@@ -20,9 +20,9 @@ public static class ApplicationDependencyInjection
 
         services.AddScoped<IProdutoService, ProdutoService>();
 
-        // Validators agora sao dos Requests (Application), nao mais dos Commands
-        // (Domain) - evita o Domain precisar referenciar o FluentValidation.
-        services.AddValidatorsFromAssemblyContaining<CriarProdutoRequestValidator>();
+        // Um unico validator do ProdutoRequest (Application), usado em criar e editar -
+        // evita o Domain precisar referenciar o FluentValidation.
+        services.AddValidatorsFromAssemblyContaining<ProdutoRequestValidator>();
 
         TypeAdapterConfig.GlobalSettings.Scan(typeof(ProdutoProfile).Assembly);
 
