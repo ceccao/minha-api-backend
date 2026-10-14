@@ -5,8 +5,9 @@
 FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
 WORKDIR /source
 
-# .editorconfig entra porque EnforceCodeStyleInBuild faz o build depender dele.
-COPY Directory.Build.props .editorconfig ./
+# Directory.Packages.props traz as VERSOES dos pacotes (sem ele o restore pega versoes
+# antigas e falha). .editorconfig entra porque EnforceCodeStyleInBuild faz o build depender dele.
+COPY Directory.Build.props Directory.Packages.props .editorconfig ./
 COPY src/ ./src/
 RUN dotnet restore src/MinhaApi.Api/MinhaApi.Api.csproj
 RUN dotnet publish src/MinhaApi.Api/MinhaApi.Api.csproj \
