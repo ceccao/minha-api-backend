@@ -5,6 +5,13 @@ updates:
     schedule: { interval: "weekly" }
     # EF Core e Pomelo precisam subir JUNTOS (mesmo major). Agrupar evita PRs
     # separados que quebram o build individualmente.
+    # EF Core e Pomelo ficam no major 9 ate o Pomelo lancar versao estavel para EF Core 10.
+    # Atualizacoes minor e patch continuam chegando; major so por decisao manual.
+    ignore:
+      - dependency-name: "Microsoft.EntityFrameworkCore*"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "Pomelo.EntityFrameworkCore.MySql*"
+        update-types: ["version-update:semver-major"]
     groups:
       efcore:
         patterns:
