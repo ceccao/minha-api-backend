@@ -6,7 +6,7 @@
 
 ## 1. Visão Geral
 
-Template base de API REST em C#/.NET, organizado em camadas (Domain, Application, Infra, API, CrossCutting, IoC), com persistência via NHibernate/MySQL. O projeto nasceu como estudo prático — várias decisões aqui foram tomadas deliberadamente de forma explícita (em vez de herdar comportamento de classes base "mágicas") para reforçar o entendimento de cada peça na hora de construir.
+Template base de API REST em C#/.NET, organizado em camadas (Domain, Application, Infra, API, CrossCutting, IoC), com persistência via Entity Framework Core/MySQL. O projeto nasceu como estudo prático — várias decisões aqui foram tomadas deliberadamente de forma explícita (em vez de herdar comportamento de classes base "mágicas") para reforçar o entendimento de cada peça na hora de construir.
 
 **Entidade de referência:** `Produto` — implementa o CRUD completo (criar, editar, listar com filtro/paginação/ordenação, recuperar por id, excluir via soft delete) e serve de modelo para qualquer entidade nova.
 
@@ -18,11 +18,11 @@ Template base de API REST em C#/.NET, organizado em camadas (Domain, Application
 |---|---|
 | Runtime | .NET 10 |
 | Web | ASP.NET Core (Controllers, não Minimal API) |
-| ORM | NHibernate + FluentNHibernate (mapeamento) |
-| Driver de banco | MySqlConnector + `NHibernate.Driver.MySqlConnector` |
+| ORM | Entity Framework Core 9 (mapeamento por `IEntityTypeConfiguration`, sem EF Migrations) |
+| Provider MySQL | `Pomelo.EntityFrameworkCore.MySql` 9.x (traz o MySqlConnector) |
 | Banco | MySQL 8.x |
 | Mapeamento objeto-objeto | Mapster |
-| Validação | FluentValidation (instalado e com validators escritos — ver §9, pendência de conexão) |
+| Validação | FluentValidation (injetado explicitamente no `ProdutoService` — ver §5.4) |
 | Ordenação dinâmica | System.Linq.Dynamic.Core |
 | Logging | Serilog (console + arquivo JSON em produção, enrichment de Correlation ID) |
 | Documentação da API | Swashbuckle (Swagger/OpenAPI), com XML comments habilitado |
@@ -41,7 +41,7 @@ src/
 ├── MinhaApi.Application/    → Orquestração: Requests/Responses, Profiles (Mapster), Services (wrapper de transação)
 ├── MinhaApi.CrossCutting/   → Exceptions tipadas, Middlewares, Logging, Enums "universais"
 ├── MinhaApi.Domain/         → Entidades, Commands, Domain Services (lógica de negócio), interfaces de Repository
-├── MinhaApi.Infra/          → NHibernate, Mappings, Repositories concretos, UnitOfWork
+├── MinhaApi.Infra/          → DbContext, Mappings (`IEntityTypeConfiguration`), Repositories concretos, UnitOfWork
 ├── MinhaApi.IoC/            → Composição da injeção de dependência
 └── MinhaApi.Jobs/           → Reservado para tarefas agendadas (ainda vazio)
 ```
@@ -77,7 +77,7 @@ public class Produto
     public virtual decimal Preco { get; protected set; }
     public virtual Situacao Situacao { get; protected set; }
 
-    protected Produto() { }  // exigencia do NHibernate (proxy)
+    protected Produto() { }  // exigencia do EF Core (materializacao)
 
     public Produto(string nome, decimal preco)
     {
@@ -94,8 +94,8 @@ public class Produto
 ```
 
 **Convenções da entidade:**
-- Propriedades `virtual` com `protected set` — obrigatório pro NHibernate gerar proxy de lazy loading.
-- Construtor sem parâmetros `protected` — só pra exigência do NHibernate, nunca é chamado pelo código da aplicação.
+- Propriedades com `protected set` (o EF Core preenche por reflection). `virtual` é opcional: só seria exigido com `UseLazyLoadingProxies`, que não usamos.
+- Construtor sem parâmetros `protected` — só pra o EF Core instanciar a entidade ao ler do banco, nunca é chamado pelo código da aplicação.
 - Toda regra de invariante (nome obrigatório, tamanho, preço não-negativo) é validada **dentro dos próprios métodos** (`SetNome`/`SetPreco`), lançando `ArgumentException` puro — a entidade não conhece nada além do próprio domínio.
 - Status via **enum** (`Situacao`), não `bool` — ver §6.
 
@@ -223,10 +223,9 @@ public class ProdutoProfile : IRegister
 
 Registrado via `TypeAdapterConfig.GlobalSettings.Scan(assembly)` na IoC — qualquer `IRegister` novo na Application é pego automaticamente.
 
-### 5.4 ⚠️ Pendência: validação de entrada não está conectada
+### 5.4 Validação de entrada
 
-Existem validators escritos (`CriarProdutoRequestValidator`, `AtualizarProdutoRequestValidator`, ambos `AbstractValidator<ProdutoRequest>`) e registrados na DI (`AddValidatorsFromAssemblyContaining<CriarProdutoRequestValidator>()`), **mas `ProdutoService` não injeta nem chama nenhum `IValidator<T>`**. Hoje, um `Nome` inválido só é barrado pela própria entidade (`SetNome` lançando `ArgumentException`) — e como `ArgumentException` não é um `AppException`, o `ExceptionMiddleware` devolve **500 genérico** em vez de **400 com mensagem clara**. Reconectar essa validação é uma tarefa pendente.
-
+Um único `ProdutoRequestValidator` (`AbstractValidator<ProdutoRequest>`) é registrado na DI e **injetado explicitamente** no `ProdutoService` (`FluentValidation.AspNetCore` foi descontinuado, então não há auto-validação do MVC). `InserirAsync` e `EditarAsync` validam o request antes de abrir a transação; se houver erro, lançam `EntidadeInvalidaException`, que o `ExceptionMiddleware` devolve como **400** com a lista `errors`. A validação da própria entidade (`SetNome`/`SetPreco`) continua como segunda barreira de invariante.
 ---
 
 ## 6. CrossCutting
@@ -264,38 +263,39 @@ Todas herdam de `AppException` (abstrata, define `StatusCode`). O `ExceptionMidd
 
 ## 7. Infra
 
-### 7.1 Mapeamento NHibernate
+### 7.1 Mapeamento EF Core
 
 ```csharp
-public class ProdutoMap : ClassMap<Produto>
+public class ProdutoConfiguration : IEntityTypeConfiguration<Produto>
 {
-    public ProdutoMap()
+    public void Configure(EntityTypeBuilder<Produto> builder)
     {
-        Table("PRODUTO");
-        Id(x => x.Id).Column("ID").GeneratedBy.Identity();
-        Map(x => x.Nome).Column("NOME").Length(100).Not.Nullable();
-        Map(x => x.Preco).Column("PRECO").Precision(18).Scale(2).Not.Nullable();
-        Map(x => x.Situacao).Column("SITUACAO").CustomType<int>().Not.Nullable();
+        builder.ToTable("PRODUTO");
+        builder.HasKey(x => x.Id);
+        builder.Property(x => x.Id).HasColumnName("ID").ValueGeneratedOnAdd();
+        builder.Property(x => x.Nome).HasColumnName("NOME").HasMaxLength(100).IsRequired();
+        builder.Property(x => x.Preco).HasColumnName("PRECO").HasPrecision(18, 2).IsRequired();
+        builder.Property(x => x.Situacao).HasColumnName("SITUACAO").HasConversion<int>().IsRequired();
     }
 }
 ```
 
-`Situacao` (enum) é mapeado como `int` explícito via `.CustomType<int>()` — sem isso, o NHibernate não sabe serializar o enum pro banco.
+`Situacao` (enum) é mapeado como `int` via `.HasConversion<int>()`. O schema é do Liquibase: **nada de `dotnet ef migrations`, `Migrate()` ou `EnsureCreated()`**, e o EF Core não valida o schema na subida — divergência de nome de coluna só aparece na primeira query.
 
-> ⚠️ **Sem `Version(...)`** — esta entidade não tem controle de concorrência otimista. Se sua entidade nova precisar (recomendado pra qualquer recurso editável concorrentemente), adicione o campo `Version` na entidade e mapeie aqui.
+> ⚠️ **Sem token de concorrência** — esta entidade não tem controle de concorrência otimista. Se sua entidade nova precisar (recomendado pra qualquer recurso editável concorrentemente), adicione o campo `Version` na entidade, mapeie com `.IsConcurrencyToken()` e incremente-o no `SaveChangesAsync` do `MinhaApiDbContext` (o EF Core não incrementa token `int` sozinho). O `RepositorioBase.EditarAsync` já traduz `DbUpdateConcurrencyException` em `ConflitoException`.
 
 ### 7.2 `IUnitOfWork` / `UnitOfWork`
 
 ```csharp
 public interface IUnitOfWork
 {
-    void BeginTransaction();                                        // sincrono - NHibernate nao tem overload async pra abrir
+    void BeginTransaction();                                        // sincrono - mantido assim por simplicidade
     Task CommitAsync(CancellationToken cancellationToken = default);   // async de verdade - I/O com o banco
     Task RollbackAsync(CancellationToken cancellationToken = default); // idem
 }
 ```
 
-Registrado como **Scoped** — precisa usar a mesma `ISession` da requisição (também Scoped).
+Registrado como **Scoped** — usa o mesmo `MinhaApiDbContext` da requisição (também Scoped).
 
 ### 7.3 `RepositorioBase<TEntidade>`
 
@@ -371,7 +371,7 @@ O `NoWarn` evita que o compilador exija comentário em **todo** membro público 
    - `Services/Interfaces/I{Entidade}sService.cs` + `Services/{Entidade}sService.cs` — método `ValidarAsync` central (busca + `NaoEncontradoException`), os demais reaproveitam ele.
 
 2. **Infra:**
-   - `Mappings/{Entidade}Map.cs` — mapeia todas as colunas, incluindo enums via `.CustomType<int>()`.
+   - `Mappings/{Entidade}Configuration.cs` — `IEntityTypeConfiguration<T>` mapeando todas as colunas (enums como int via `.HasConversion<int>()`); o `MinhaApiDbContext` descobre sozinho. Os nomes de coluna precisam bater com o SQL do Liquibase.
    - `Repositories/{Entidade}Repository.cs` — herda `RepositorioBase<T>`, implementa `Filtrar()` se existir.
 
 3. **Application:**
@@ -395,7 +395,7 @@ O `NoWarn` evita que o compilador exija comentário em **todo** membro público 
 
 | Item | Situação |
 |---|---|
-| Validação de entrada (FluentValidation) | Escrita, registrada na DI, **não conectada** na Service (§5.4) |
+| Validação de entrada (FluentValidation) | ✅ Conectada na Service (§5.4) |
 | Concorrência otimista (`Version`) | Removida da entidade `Produto` — reintroduzir por entidade, se necessário |
 | Auditoria (`CriadoEm`/`AtualizadoEm`) | Removida da entidade `Produto` — reintroduzir por entidade, se necessário |
 | Autenticação/Autorização | Não implementada ainda |
