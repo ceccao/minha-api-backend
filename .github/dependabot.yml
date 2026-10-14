@@ -1,0 +1,18 @@
+version: 2
+updates:
+  - package-ecosystem: "nuget"
+    directory: "/"
+    schedule: { interval: "weekly" }
+    # EF Core e Pomelo precisam subir JUNTOS (mesmo major). Agrupar evita PRs
+    # separados que quebram o build individualmente.
+    groups:
+      efcore:
+        patterns:
+          - "Microsoft.EntityFrameworkCore*"
+          - "Pomelo.EntityFrameworkCore.MySql*"
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule: { interval: "weekly" }
+  - package-ecosystem: "docker"
+    directory: "/"
+    schedule: { interval: "weekly" }

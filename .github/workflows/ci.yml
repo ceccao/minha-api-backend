@@ -30,3 +30,12 @@ jobs:
         run: |
           dotnet list package --vulnerable --include-transitive 2>&1 | tee vuln.txt
           ! grep -q "has the following vulnerable packages" vuln.txt
+
+  docker:
+    name: Build da imagem Docker
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Build (sem push)
+        run: docker build -f src/MinhaApi.Api/Dockerfile -t minha-api:ci .
