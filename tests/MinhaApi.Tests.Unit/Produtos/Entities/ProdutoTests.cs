@@ -3,7 +3,7 @@ using MinhaApi.CrossCutting.Enums;
 using MinhaApi.Domain.Produtos.Entities;
 using Xunit;
 
-namespace MinhaApi.Tests.Unit.Domain.Produtos;
+namespace MinhaApi.Tests.Unit.Produtos.Entities;
 
 public class ProdutoTests
 {

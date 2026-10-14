@@ -19,7 +19,7 @@ public class ProdutosService(IProdutoRepository produtoRepository) : IProdutosSe
     public async Task<Produto> InserirAsync(ProdutoCommand command, CancellationToken cancellationToken)
     {
         Produto produto = new(
-            command.Nome, 
+            command.Nome,
             command.Preco
             );
 

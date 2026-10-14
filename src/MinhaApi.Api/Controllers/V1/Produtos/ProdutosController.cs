@@ -58,7 +58,7 @@ public class ProdutosController(IProdutoService produtoService) : ControllerBase
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status409Conflict)]
     public async Task<IActionResult> EditarAsync(int id, ProdutoRequest request, CancellationToken cancellationToken)
         => Ok(await produtoService.EditarAsync(id, request, cancellationToken));
-    
+
     /// <summary>
     /// Exclui um produto existente.
     /// </summary>

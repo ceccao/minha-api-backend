@@ -2,56 +2,66 @@ using System.Linq.Dynamic.Core;
 using System.Linq.Expressions;
 using MinhaApi.CrossCutting.Exceptions;
 using MinhaApi.Domain.Abstractions;
-using NHibernate;
-using NHibernate.Linq;
+using Microsoft.EntityFrameworkCore;
 
 namespace MinhaApi.Infra.Config;
 
-public class RepositorioBase<TEntidade>(ISession session) : IRepositorioBase<TEntidade>
+public class RepositorioBase<TEntidade>(MinhaApiDbContext context) : IRepositorioBase<TEntidade>
     where TEntidade : class
 {
-    protected ISession Session { get; } = session;
+    protected MinhaApiDbContext Context { get; } = context;
+
+    protected DbSet<TEntidade> Set => Context.Set<TEntidade>();
 
     public virtual async Task InserirAsync(TEntidade entidade, CancellationToken cancellationToken = default)
-        => await Session.SaveAsync(entidade, cancellationToken);
+    {
+        await Set.AddAsync(entidade, cancellationToken);
+        await Context.SaveChangesAsync(cancellationToken);
+    }
 
     public virtual async Task InserirAsync(IEnumerable<TEntidade> entidades, CancellationToken cancellationToken = default)
     {
-        foreach (var entidade in entidades)
-        {
-            await Session.SaveAsync(entidade, cancellationToken);
-        }
+        await Set.AddRangeAsync(entidades, cancellationToken);
+        await Context.SaveChangesAsync(cancellationToken);
     }
 
     public virtual async Task EditarAsync(TEntidade entidade, CancellationToken cancellationToken = default)
     {
         try
         {
-            await Session.UpdateAsync(entidade, cancellationToken);
-            await Session.FlushAsync(cancellationToken);
+            // Se a entidade ja veio rastreada de um RecuperarAsync o Update e
+            // desnecessario, mas inofensivo.
+            Context.Update(entidade);
+            await Context.SaveChangesAsync(cancellationToken);
         }
-        catch (StaleObjectStateException)
+        catch (DbUpdateConcurrencyException)
         {
+            // O estado rastreado ficou desatualizado: limpa o contexto para que uma
+            // nova tentativa recarregue do banco, e traduz para a exception do
+            // CrossCutting (que nao conhece o ORM - README §7.3).
+            Context.ChangeTracker.Clear();
             throw new ConflitoException("O recurso foi modificado por outra operação. Recarregue e tente novamente.");
         }
     }
 
     public virtual async Task ExcluirAsync(TEntidade entidade, CancellationToken cancellationToken = default)
-        => await Session.DeleteAsync(entidade, cancellationToken);
+    {
+        Set.Remove(entidade);
+        await Context.SaveChangesAsync(cancellationToken);
+    }
 
     public virtual async Task ExcluirAsync(IEnumerable<TEntidade> entidades, CancellationToken cancellationToken = default)
     {
-        foreach (var entidade in entidades)
-        {
-            await Session.DeleteAsync(entidade, cancellationToken);
-        }
+        Set.RemoveRange(entidades);
+        await Context.SaveChangesAsync(cancellationToken);
     }
 
+    // FindAsync consulta o cache do contexto antes de ir ao banco.
     public virtual async Task<TEntidade> RecuperarAsync(int id, CancellationToken cancellationToken = default)
-        => await Session.GetAsync<TEntidade>(id, cancellationToken);
+        => (await Set.FindAsync([id], cancellationToken))!; // contrato do Domain (nullable desabilitado) devolve null se nao achar
 
     public virtual async Task<TEntidade> RecuperarAsync(Expression<Func<TEntidade, bool>> expressao, CancellationToken cancellationToken = default)
-        => await Session.Query<TEntidade>().Where(expressao).FirstOrDefaultAsync(cancellationToken);
+        => (await Set.FirstOrDefaultAsync(expressao, cancellationToken))!;
 
     public virtual Task<PaginacaoConsulta<TEntidade>> ListarAsync(
         PaginacaoFiltro paginacao,
@@ -102,7 +112,7 @@ public class RepositorioBase<TEntidade>(ISession session) : IRepositorioBase<TEn
         Func<IQueryable<TEntidade>, IQueryable<TEntidade>> aplicarOrdenacao,
         CancellationToken cancellationToken)
     {
-        var query = Session.Query<TEntidade>();
+        var query = Set.AsNoTracking();
 
         if (filtro is not null)
         {

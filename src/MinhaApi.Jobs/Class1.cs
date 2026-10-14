@@ -1,4 +1,4 @@
-﻿namespace MinhaApi.Jobs;
+namespace MinhaApi.Jobs;
 
 public class Class1
 {

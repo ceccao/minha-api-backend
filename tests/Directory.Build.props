@@ -1,4 +1,8 @@
 <Project>
+  <!-- O Directory.Build.props mais proximo vence: importa o da raiz para herdar
+       TargetFramework, Nullable, TreatWarningsAsErrors e AnalysisLevel. -->
+  <Import Project="$([MSBuild]::GetPathOfFileAbove('Directory.Build.props', '$(MSBuildThisFileDirectory)../'))" />
+
   <PropertyGroup>
     <!-- Nomes de teste com underscore (Metodo_Cenario_Resultado) sao uma convencao
          proposital de legibilidade, nao um erro de nomenclatura - desativamos so
