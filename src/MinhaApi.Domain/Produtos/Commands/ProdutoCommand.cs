@@ -1,8 +1,4 @@
 namespace MinhaApi.Domain.Produtos.Commands;
 
-public class ProdutoCommand
-{
-    public string Nome { get; protected set; }
-    public decimal Preco { get; protected set; }
-
-}
+// Intencao de criar ou editar um produto. Imutavel: so carrega os dados.
+public record ProdutoCommand(string Nome, decimal Preco);

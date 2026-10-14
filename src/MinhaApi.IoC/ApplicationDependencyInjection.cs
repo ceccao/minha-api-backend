@@ -16,14 +16,17 @@ public static class ApplicationDependencyInjection
     {
         // Domain Service - a logica de negocio (Criar/Editar/Excluir) mora aqui.
         // A Service da Application vira so um wrapper fino de transacao/validacao.
-        services.AddScoped<IProdutosService, ProdutosService>();
+        services.AddScoped<IProdutoDomainService, ProdutoDomainService>();
 
         services.AddScoped<IProdutoService, ProdutoService>();
 
-        // Um unico validator do ProdutoRequest (Application), usado em criar e editar -
+        // Validators da Application (ProdutoRequestValidator, ListarProdutosRequestValidator) -
         // evita o Domain precisar referenciar o FluentValidation.
         services.AddValidatorsFromAssemblyContaining<ProdutoRequestValidator>();
 
+        // Mapster estrito: mapeamento nao registrado falha na hora (veja ProdutoProfile).
+        TypeAdapterConfig.GlobalSettings.RequireExplicitMapping = true;
+        TypeAdapterConfig.GlobalSettings.RequireDestinationMemberSource = true;
         TypeAdapterConfig.GlobalSettings.Scan(typeof(ProdutoProfile).Assembly);
 
         return services;

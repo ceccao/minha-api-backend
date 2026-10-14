@@ -1,5 +1,6 @@
 using AwesomeAssertions;
 using MinhaApi.CrossCutting.Enums;
+using MinhaApi.CrossCutting.Exceptions;
 using MinhaApi.Domain.Produtos.Entities;
 using Xunit;
 
@@ -20,32 +21,29 @@ public class ProdutoTests
     [Theory]
     [InlineData("")]
     [InlineData("   ")]
-    public void ConstructorComNomeVazioOuEmBrancoDeveLancarArgumentException(string nomeInvalido)
+    public void ConstructorComNomeVazioOuEmBrancoDeveLancarRegraDeNegocioException(string nomeInvalido)
     {
         var acao = () => new Produto(nomeInvalido, 100m);
 
-        acao.Should().Throw<ArgumentException>()
-            .Where(ex => ex.ParamName == "nome");
+        acao.Should().Throw<RegraDeNegocioException>();
     }
 
     [Theory]
     [InlineData("ab")]
     [InlineData("Produto com nome bem longo que ultrapassa exatamente o limite de cem caracteres permitidos no campo nome")]
-    public void ConstructorComNomeForaDoTamanhoPermitidoDeveLancarArgumentException(string nomeInvalido)
+    public void ConstructorComNomeForaDoTamanhoPermitidoDeveLancarRegraDeNegocioException(string nomeInvalido)
     {
         var acao = () => new Produto(nomeInvalido, 100m);
 
-        acao.Should().Throw<ArgumentException>()
-            .Where(ex => ex.ParamName == "nome");
+        acao.Should().Throw<RegraDeNegocioException>();
     }
 
     [Fact]
-    public void ConstructorComPrecoNegativoDeveLancarArgumentException()
+    public void ConstructorComPrecoNegativoDeveLancarRegraDeNegocioException()
     {
         var acao = () => new Produto("Produto Válido", -10m);
 
-        acao.Should().Throw<ArgumentException>()
-            .Where(ex => ex.ParamName == "preco");
+        acao.Should().Throw<RegraDeNegocioException>();
     }
 
     [Fact]
@@ -59,14 +57,13 @@ public class ProdutoTests
     }
 
     [Fact]
-    public void SetNomeComNomeVazioDeveLancarArgumentException()
+    public void SetNomeComNomeVazioDeveLancarRegraDeNegocioException()
     {
         var produto = new Produto("Nome Original", 100m);
 
         var acao = () => produto.SetNome("");
 
-        acao.Should().Throw<ArgumentException>()
-            .Where(ex => ex.ParamName == "nome");
+        acao.Should().Throw<RegraDeNegocioException>();
     }
 
     [Fact]
@@ -80,14 +77,13 @@ public class ProdutoTests
     }
 
     [Fact]
-    public void SetPrecoComPrecoNegativoDeveLancarArgumentException()
+    public void SetPrecoComPrecoNegativoDeveLancarRegraDeNegocioException()
     {
         var produto = new Produto("Produto", 100m);
 
         var acao = () => produto.SetPreco(-1m);
 
-        acao.Should().Throw<ArgumentException>()
-            .Where(ex => ex.ParamName == "preco");
+        acao.Should().Throw<RegraDeNegocioException>();
     }
 
     [Fact]

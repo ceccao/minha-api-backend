@@ -14,11 +14,24 @@
 
 ## ADR-003 — Domain Service
 
-A regra de negócio mora em `ProdutosService` (Domain). O `ProdutoService` da Application é um wrapper fino de validação e transação.
+A regra de negócio mora em `ProdutoDomainService` (Domain). O `ProdutoService` da Application é um wrapper fino de validação e transação.
 
-## ADR-004 — `.editorconfig` ativo e regras desligadas
+## ADR-004 — `.editorconfig` ativo, estilo como sugestão
 
-O arquivo se chamava `editorconfig` (sem ponto) e não era lido. Ao ativá-lo, algumas regras ficaram desligadas de propósito: `IDE0058` (ruído em builders fluentes), `IDE0005` (exige `GenerateDocumentationFile`), `IDE0032` e `IDE0290` (falsos positivos em `PaginacaoFiltro`).
+O arquivo se chamava `editorconfig` (sem ponto) e não era lido. Regras de estilo (IDE0xxx) são só **sugestões** (pontos cinzas no editor, sem sublinhado amarelo nem erro de build). Quebram o build apenas nomenclatura, namespace e `using`, decididos na FASE 13.
+
+## ADR-005 — Revisão técnica (out/2026)
+
+- **Camadas:** a Application valida, abre a transação e converte DTOs; o Domain (`ProdutoDomainService`, entidades) guarda a regra de negócio.
+- **Gravação:** o repositório só marca a mudança; `IUnitOfWork.CommitAsync` chama `SaveChangesAsync` uma vez. A tradução de `DbUpdateConcurrencyException` para `ConflitoException` mora no `UnitOfWork`.
+- **Exceptions:** `RegraDeNegocioException` (400) para regras violadas, usável em qualquer camada com moderação. A entidade deixou de lançar `ArgumentException` (que virava 500).
+- **Nullable** ligado em todos os projetos, incluindo o Domain.
+- **Listagem:** filtros por `Nome` e `Situacao`; ordenação só pelos campos permitidos no `ListarProdutosRequestValidator`; um único `ListarAsync(IQueryable, qt, pg, cpOrd, tpOrd)`.
+- **Mapster estrito:** `RequireExplicitMapping` e `RequireDestinationMemberSource`; todo par usado fica registrado em `ProdutoProfile`.
+- **`MySqlOptions` único**, em `Infra/Config`, registrado e validado no `AddInfra`.
+- **`Program.cs` curto:** a configuração HTTP fica em `Api/Configuration/ApiConfiguration.cs` (`AddApi`, `ConfigurarHost`, `UseApi`); o IoC fica só com injeção de dependência.
+- **Raiz:** `Directory.Packages.props` (versões centrais), `global.json`, `dev.ps1` só com `dotnet run`, `scripts/verificar-mysql.ps1`; dump de código fora do git.
+- **Removidos por não terem uso:** `Result<T>`, `PagedResult`, sobrecargas extras de `ListarAsync`, `Jobs/Class1.cs`.
 
 ## Adiado de propósito
 
