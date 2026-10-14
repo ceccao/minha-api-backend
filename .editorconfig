@@ -87,12 +87,6 @@ dotnet_sort_system_directives_first = true
 dotnet_separate_import_directive_groups = false
 csharp_using_directive_placement = outside_namespace:error
 
-#### Severidade padrão dos avisos de estilo (decisão: error) ####
-# TreatWarningsAsErrors (Directory.Build.props) ja promove qualquer warning a
-# erro - aqui deixamos explicito tambem para as regras de estilo (IDE0xxx),
-# que so sao aplicadas em build por causa do EnforceCodeStyleInBuild=true.
-dotnet_analyzer_diagnostic.severity = warning
-
 #### Tamanho máximo de arquivo/método (decisão: sem limite formal) ####
 # Fica a criterio do code review, nao travado por analisador.
 
@@ -110,13 +104,9 @@ csharp_style_expression_bodied_properties = true:suggestion
 dotnet_style_readonly_field = true:suggestion
 dotnet_style_require_accessibility_modifiers = always:suggestion
 
-#### Regras desligadas de proposito (ajuste de ruido apos ativar o .editorconfig) ####
-# IDE0058: dispara em toda chamada de builder fluente (Serilog, DI) sem ganho real.
-dotnet_diagnostic.IDE0058.severity = none
-# IDE0005: so funciona no build com GenerateDocumentationFile=true, o que geraria
-# CS1591 (comentario XML ausente) em todos os membros publicos.
-dotnet_diagnostic.IDE0005.severity = none
-# IDE0032/IDE0290: falsos positivos em PaginacaoFiltro, que usa campo de apoio de
-# proposito (clamp de Qt/Pg no setter) e construtor com atribuicao a propriedade.
-dotnet_diagnostic.IDE0032.severity = none
-dotnet_diagnostic.IDE0290.severity = none
+#### Severidade das regras de estilo ####
+# Regras de ESTILO (IDE0xxx) sao apenas sugestoes: aparecem como pontinhos cinzas no
+# editor, sem sublinhado amarelo e sem quebrar o build. Quebram o build (error) so as
+# regras de nomenclatura e de namespace/using definidas acima (decisoes da FASE 13).
+# Regras de QUALIDADE (CA/ASP) seguem o AnalysisLevel do Directory.Build.props.
+dotnet_analyzer_diagnostic.category-Style.severity = suggestion

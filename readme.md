@@ -56,7 +56,7 @@ CrossCutting  ←  Domain  ←  Application  ←  Infra
 
 > ⚠️ **Diferente do desenho clássico de Clean Architecture:** aqui é o **Domain que referencia o CrossCutting** (não o contrário). Essa troca foi deliberada — o CrossCutting guarda o enum `Situacao` (§6), que é "universal" e precisa ser usado dentro do próprio Domain (na entidade `Produto`). Como um projeto não pode referenciar de volta quem já o referencia (ciclo, erro de build), a solução foi inverter a direção: `CrossCutting` não conhece mais o `Domain`, e o `Domain` passou a conhecer o `CrossCutting`.
 >
-> **Consequência prática:** o `Domain` hoje pode lançar exceptions do CrossCutting diretamente (`NaoEncontradoException<T>`, por exemplo) — não precisa mais devolver `null` pra Application decidir o que fazer. Ver `ProdutosService.ValidarAsync` (§5.3).
+> **Consequência prática:** o `Domain` hoje pode lançar exceptions do CrossCutting diretamente (`NaoEncontradoException<T>`, por exemplo) — não precisa mais devolver `null` pra Application decidir o que fazer. Ver `ProdutoDomainService.ValidarAsync` (§5.3).
 
 ### 3.2 O que NÃO existe (por decisão consciente)
 
@@ -96,7 +96,7 @@ public class Produto
 **Convenções da entidade:**
 - Propriedades com `protected set` (o EF Core preenche por reflection). `virtual` é opcional: só seria exigido com `UseLazyLoadingProxies`, que não usamos.
 - Construtor sem parâmetros `protected` — só pra o EF Core instanciar a entidade ao ler do banco, nunca é chamado pelo código da aplicação.
-- Toda regra de invariante (nome obrigatório, tamanho, preço não-negativo) é validada **dentro dos próprios métodos** (`SetNome`/`SetPreco`), lançando `ArgumentException` puro — a entidade não conhece nada além do próprio domínio.
+- Toda regra de invariante (nome obrigatório, tamanho, preço não-negativo) é validada **dentro dos próprios métodos** (`SetNome`/`SetPreco`), lançando `RegraDeNegocioException` (400) — a entidade não conhece nada além do próprio domínio.
 - Status via **enum** (`Situacao`), não `bool` — ver §6.
 
 > ⚠️ **Pendência conhecida:** esta entidade não tem campo de concorrência otimista (`Version`) nem auditoria (`CriadoEm`/`AtualizadoEm`). Se sua entidade nova precisar disso, adicione os campos manualmente e mapeie no `ProdutoMap`-equivalente (ver §8) — não existe mais nenhuma base que forneça isso de graça.
@@ -113,12 +113,12 @@ public class ProdutoCommand
 
 Um **único Command** serve tanto pra criação quanto pra edição (diferente de um modelo com `InserirXCommand`/`EditarXCommand` separados) — o `Id`, quando necessário, é passado como parâmetro à parte nos métodos do Domain Service, não dentro do Command.
 
-### 4.3 Domain Service (`Domain/Produtos/Services/ProdutosService.cs`)
+### 4.3 Domain Service (`Domain/Produtos/Services/ProdutoDomainService.cs`)
 
 **Esta é a camada que concentra a lógica de negócio de verdade** — não a Application. Depende só do `IProdutoRepository` (Domain) e, quando precisa, do `CrossCutting` (pra exceptions).
 
 ```csharp
-public interface IProdutosService
+public interface IProdutoDomainService
 {
     Task<Produto> ValidarAsync(int id, CancellationToken cancellationToken);
     Task<Produto> InserirAsync(ProdutoCommand command, CancellationToken cancellationToken);
@@ -170,7 +170,7 @@ Application/Produtos/DataTransfer/
 
 ```csharp
 public class ProdutoService(
-    IProdutosService produtosService,
+    IProdutoDomainService produtoDomainService,
     IProdutoRepository produtoRepository,
     IUnitOfWork unitOfWork) : IProdutoService
 {
@@ -180,7 +180,7 @@ public class ProdutoService(
         {
             var command = request.Adapt<ProdutoCommand>();
             unitOfWork.BeginTransaction();
-            var produto = await produtosService.InserirAsync(command, cancellationToken);
+            var produto = await produtoDomainService.InserirAsync(command, cancellationToken);
             await unitOfWork.CommitAsync(cancellationToken);
             return produto.Adapt<ProdutoResponse>();
         }
@@ -354,7 +354,7 @@ O `NoWarn` evita que o compilador exija comentário em **todo** membro público 
 ## 9. Testes
 
 - **Domain** (`ProdutoTests.cs`): testa a entidade isoladamente — construtor, `SetNome`/`SetPreco`, `Ativar`/`Inativar`, sem nenhum mock (não precisa, a entidade não tem dependência).
-- **Application** (`ProdutoServiceTests.cs`): mocka `IProdutosService`, `IProdutoRepository` e `IUnitOfWork` (via NSubstitute) — testa que a Service chama o método certo do Domain Service, faz commit/rollback corretamente, e repropaga exceptions.
+- **Application** (`ProdutoServiceTests.cs`): mocka `IProdutoDomainService`, `IProdutoRepository` e `IUnitOfWork` (via NSubstitute) — testa que a Service chama o método certo do Domain Service, faz commit/rollback corretamente, e repropaga exceptions.
 - **Integração**: ainda não implementado (placeholder `UnitTest1.cs`) — fica pra quando houver Docker disponível (Testcontainers).
 
 **Padrão de mock de transação:** como `IUnitOfWork` é injetado e mockado, dá pra verificar que um método de escrita chamou `CommitAsync` (caminho feliz) ou `RollbackAsync` (quando o Domain Service lança exception) — ver `InserirAsyncQuandoDomainServiceLancaExceptionDeveFazerRollbackERepropagar`.

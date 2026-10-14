@@ -499,3 +499,6 @@ database/*.log
 .vs/
 .idea/
 *.user
+
+dump-codigo.txt
+gerar-dump.ps1

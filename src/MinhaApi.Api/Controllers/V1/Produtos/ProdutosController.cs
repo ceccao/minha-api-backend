@@ -1,5 +1,5 @@
 using Microsoft.AspNetCore.Mvc;
-using MinhaApi.Application.Common;
+using MinhaApi.Domain.Abstractions;
 using MinhaApi.Application.Produtos.DataTransfer.Requests;
 using MinhaApi.Application.Produtos.DataTransfer.Responses;
 using MinhaApi.Application.Produtos.Services.Interfaces;
@@ -17,7 +17,7 @@ public class ProdutosController(IProdutoService produtoService) : ControllerBase
     /// <param name="request">Parâmetros de paginação, ordenação e filtro.</param>
     /// <param name="cancellationToken"></param>
     [HttpGet]
-    [ProducesResponseType<PagedResult<ProdutoResponse>>(StatusCodes.Status200OK)]
+    [ProducesResponseType<PaginacaoConsulta<ProdutoResponse>>(StatusCodes.Status200OK)]
     public async Task<IActionResult> ListarAsync([FromQuery] ListarProdutosRequest request, CancellationToken cancellationToken)
         => Ok(await produtoService.ListarAsync(request, cancellationToken));
 

@@ -18,6 +18,11 @@ public class ProdutoRepository(MinhaApiDbContext context) : RepositorioBase<Prod
             query = query.Where(p => p.Nome.Contains(filtro.Nome));
         }
 
+        if (filtro.Situacao.HasValue)
+        {
+            query = query.Where(p => p.Situacao == filtro.Situacao.Value);
+        }
+
         return query;
     }
 }
