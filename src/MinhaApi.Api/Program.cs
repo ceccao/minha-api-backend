@@ -5,7 +5,7 @@ var builder = WebApplication.CreateBuilder(args);
 
 builder.ConfigurarHost();                              // Serilog, Kestrel, validacao de escopo da DI
 builder.Services.AddIoC(builder.Configuration);        // camadas de negocio e banco
-builder.Services.AddApi(builder.Configuration);        // controllers, swagger, cors, rate limit, health
+builder.Services.AddApi(builder.Configuration, builder.Environment);     // controllers, swagger, cors, rate limit, health
 
 var app = builder.Build();
 

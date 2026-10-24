@@ -8,4 +8,7 @@ public class ProdutoResponse
     public string? Nome { get; set; }
     public decimal Preco { get; set; }
     public Situacao Situacao { get; set; }
+    public DateTime CriadoEm { get; set; }
+    public DateTime? AtualizadoEm { get; set; }
+    public int Version { get; set; }
 }

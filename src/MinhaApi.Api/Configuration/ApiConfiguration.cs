@@ -1,3 +1,4 @@
+using MinhaApi.CrossCutting.Handlers;
 using MinhaApi.CrossCutting.Middlewares;
 using Serilog;
 
@@ -11,7 +12,7 @@ public static class ApiConfiguration
 {
     private const long LimiteCorpoRequisicaoBytes = 10 * 1024 * 1024; // 10 MB
 
-    public static IServiceCollection AddApi(this IServiceCollection services, IConfiguration configuration)
+    public static IServiceCollection AddApi(this IServiceCollection services, IConfiguration configuration, IHostEnvironment environment)
     {
         // Validacao e feita explicitamente na Application (ProdutoService), nao por filtro
         // automatico do MVC. SuppressAsyncSuffixInActionNames = false mantem o nome da
@@ -19,8 +20,11 @@ public static class ApiConfiguration
         // CreatedAtAction nao bate com o nome real da rota.
         services.AddControllers(options => options.SuppressAsyncSuffixInActionNames = false);
 
+        services.AddExceptionHandler<GlobalExceptionHandler>();
+        services.AddProblemDetails();
+
         services.AddSwaggerConfigurado();
-        services.AddCorsConfigurada(configuration);
+        services.AddCorsConfigurada(configuration, environment);
         services.AddRateLimitConfigurado();
 
         // Health check real: so responde Healthy se conseguir falar com o banco.
@@ -50,7 +54,7 @@ public static class ApiConfiguration
     public static WebApplication UseApi(this WebApplication app)
     {
         app.UseMiddleware<CorrelationIdMiddleware>();
-        app.UseMiddleware<ExceptionMiddleware>();
+        app.UseExceptionHandler();
         app.UseMiddleware<SecurityHeadersMiddleware>();
 
         if (!app.Environment.IsDevelopment())

@@ -1,9 +1,10 @@
 using MinhaApi.CrossCutting.Enums;
 using MinhaApi.CrossCutting.Exceptions;
+using MinhaApi.Domain.Abstractions;
 
 namespace MinhaApi.Domain.Produtos.Entities;
 
-public class Produto
+public class Produto : IEntidadeAuditavel, IEntidadeVersionada
 {
     // Limites publicos para o validator da Application usar os mesmos valores.
     public const int NomeTamanhoMinimo = 3;
@@ -13,6 +14,11 @@ public class Produto
     public string Nome { get; protected set; } = string.Empty;
     public decimal Preco { get; protected set; }
     public Situacao Situacao { get; protected set; }
+
+    // Auditoria e concorrencia otimista: preenchidos pelo MinhaApiDbContext ao gravar.
+    public DateTime CriadoEm { get; protected set; }
+    public DateTime? AtualizadoEm { get; protected set; }
+    public int Version { get; protected set; }
 
     // Exigido pelo EF Core para materializar a entidade ao ler do banco.
     protected Produto() { }
