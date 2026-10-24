@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using MinhaApi.Domain.Abstractions;
 using MinhaApi.Domain.Produtos.Entities;
+using MinhaApi.Domain.Usuarios.Entities;
 
 namespace MinhaApi.Infra.Config;
 
@@ -10,6 +11,7 @@ namespace MinhaApi.Infra.Config;
 public class MinhaApiDbContext(DbContextOptions<MinhaApiDbContext> options) : DbContext(options)
 {
     public DbSet<Produto> Produtos => Set<Produto>();
+    public DbSet<Usuario> Usuarios => Set<Usuario>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
         => modelBuilder.ApplyConfigurationsFromAssembly(typeof(MinhaApiDbContext).Assembly);

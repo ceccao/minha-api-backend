@@ -25,6 +25,7 @@ public static class ApiConfiguration
 
         services.AddSwaggerConfigurado();
         services.AddCorsConfigurada(configuration, environment);
+        services.AddAutenticacao();
         services.AddRateLimitConfigurado();
 
         // Health check real: so responde Healthy se conseguir falar com o banco.
@@ -65,11 +66,12 @@ public static class ApiConfiguration
         app.UseHttpsRedirection();
         app.UseCors(CorsConfiguration.PoliticaPadrao);
         app.UseRateLimiter();
+        app.UseAuthentication();
+        app.UseAuthorization();
 
-        // UseAuthentication + UseAuthorization entram aqui na FASE 17 (JWT).
 
-        app.MapControllers().RequireRateLimiting(RateLimitConfiguration.PoliticaPadrao);
-        app.MapHealthChecks("/health");
+        app.MapControllers();
+        app.MapHealthChecks("/health").AllowAnonymous();
 
         // Swagger UI somente em desenvolvimento.
         if (app.Environment.IsDevelopment())

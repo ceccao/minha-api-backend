@@ -1,16 +1,22 @@
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using MinhaApi.CrossCutting.Options;
 
 namespace MinhaApi.IoC;
 
 public static class CrossCuttingDependencyInjection
 {
-    // Reservado para registros futuros do CrossCutting via DI (ex: rate limiting
-    // customizado, health checks especificos). Os middlewares (ExceptionMiddleware,
-    // CorrelationIdMiddleware, SecurityHeadersMiddleware) NAO precisam de registro
-    // aqui - o ASP.NET Core os ativa sozinho via UseMiddleware<T>() no Program.cs
-    // (FASE 11), resolvendo as dependencias do construtor pela DI automaticamente.
-    [System.Diagnostics.CodeAnalysis.SuppressMessage("Style", "IDE0060", Justification = "Assinatura reservada para registros futuros que dependam de configuracao.")]
+    // Os middlewares e o GlobalExceptionHandler sao ativados na Api (UseMiddleware /
+    // AddExceptionHandler). Aqui ficam as opcoes compartilhadas entre camadas.
     public static IServiceCollection AddCrossCutting(this IServiceCollection services, IConfiguration config)
-        => services;
+    {
+        // A API nao sobe sem uma chave JWT valida (>= 32 caracteres).
+        services
+            .AddOptions<JwtOptions>()
+            .Bind(config.GetSection(JwtOptions.Secao))
+            .ValidateDataAnnotations()
+            .ValidateOnStart();
+
+        return services;
+    }
 }

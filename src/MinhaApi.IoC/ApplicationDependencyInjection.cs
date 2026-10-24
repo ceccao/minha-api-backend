@@ -1,6 +1,9 @@
 using FluentValidation;
 using Mapster;
 using Microsoft.Extensions.DependencyInjection;
+using MinhaApi.Application.Autenticacao;
+using MinhaApi.Application.Autenticacao.Services;
+using MinhaApi.Application.Autenticacao.Services.Interfaces;
 using MinhaApi.Application.Produtos.Profiles;
 using MinhaApi.Application.Produtos.Services;
 using MinhaApi.Application.Produtos.Services.Interfaces;
@@ -19,6 +22,8 @@ public static class ApplicationDependencyInjection
         services.AddScoped<IProdutoDomainService, ProdutoDomainService>();
 
         services.AddScoped<IProdutoService, ProdutoService>();
+        services.AddScoped<IAutenticacaoService, AutenticacaoService>();
+        services.AddScoped<AdminSeedService>();
 
         // Validators da Application (ProdutoRequestValidator, ListarProdutosRequestValidator) -
         // evita o Domain precisar referenciar o FluentValidation.
