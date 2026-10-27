@@ -32,6 +32,12 @@ public class ProdutoDomainService(IProdutoRepository produtoRepository) : IProdu
     {
         Produto produto = await ValidarAsync(id, cancellationToken);
 
+        // Cliente enviou a versao que leu: se mudou, outra pessoa editou antes.
+        if (command.Version.HasValue && command.Version.Value != produto.Version)
+        {
+            throw new ConflitoException("O produto foi modificado por outra operação. Recarregue e tente novamente.");
+        }
+
         produto.SetNome(command.Nome);
         produto.SetPreco(command.Preco);
 

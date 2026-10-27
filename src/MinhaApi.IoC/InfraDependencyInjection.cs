@@ -4,8 +4,11 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
 using MinhaApi.Domain.Abstractions;
 using MinhaApi.Domain.Produtos.Repositories;
+using MinhaApi.Domain.Usuarios.Repositories;
+using MinhaApi.Infra.Auth;
 using MinhaApi.Infra.Config;
 using MinhaApi.Infra.Produtos.Repositories;
+using MinhaApi.Infra.Usuarios.Repositories;
 
 namespace MinhaApi.IoC;
 
@@ -44,6 +47,11 @@ public static class InfraDependencyInjection
         services.AddScoped<IUnitOfWork, UnitOfWork>();
 
         services.AddScoped<IProdutoRepository, ProdutoRepository>();
+        services.AddScoped<IUsuarioRepository, UsuarioRepository>();
+
+        // Autenticacao: hash de senha (BCrypt) e emissao do JWT.
+        services.AddSingleton<ISenhaHasher, BCryptSenhaHasher>();
+        services.AddSingleton<IGeradorToken, JwtGeradorToken>();
 
         return services;
     }
