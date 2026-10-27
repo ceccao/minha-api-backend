@@ -225,7 +225,7 @@ Registrado via `TypeAdapterConfig.GlobalSettings.Scan(assembly)` na IoC — qual
 
 ### 5.4 Validação de entrada
 
-Um único `ProdutoRequestValidator` (`AbstractValidator<ProdutoRequest>`) é registrado na DI e **injetado explicitamente** no `ProdutoService` (`FluentValidation.AspNetCore` foi descontinuado, então não há auto-validação do MVC). `InserirAsync` e `EditarAsync` validam o request antes de abrir a transação; se houver erro, lançam `EntidadeInvalidaException`, que o `ExceptionMiddleware` devolve como **400** com a lista `errors`. A validação da própria entidade (`SetNome`/`SetPreco`) continua como segunda barreira de invariante.
+Um único `ProdutoRequestValidator` (`AbstractValidator<ProdutoRequest>`) é registrado na DI e **injetado explicitamente** no `ProdutoService` (`FluentValidation.AspNetCore` foi descontinuado, então não há auto-validação do MVC). `InserirAsync` e `EditarAsync` validam o request antes de abrir a transação; se houver erro, lançam `EntidadeInvalidaException`, que o `GlobalExceptionHandler` devolve como **400** com a lista `errors`. A validação da própria entidade (`SetNome`/`SetPreco`) continua como segunda barreira de invariante.
 ---
 
 ## 6. CrossCutting
@@ -248,15 +248,17 @@ Vive no CrossCutting especificamente porque é usado em **todas as camadas** (Do
 |---|---|---|
 | `NaoEncontradoException<T>` | 404 | Recurso não encontrado por id |
 | `EntidadeInvalidaException` | 400 | Validação de entrada falhou (lista de erros) |
-| `ConflitoException` | 409 | Concorrência otimista (hoje sem uso ativo — ver §7) |
+| `ConflitoException` | 409 | Concorrência otimista (`Version` desatualizada) |
+| `RegraDeNegocioException` | 400 | Regra de negócio violada (entidades e serviços) |
+| `NaoAutenticadoException` | 401 | Login inválido — mensagem sempre genérica |
 | `AcessoNegadoException` | 403 | Reservada pra quando IDOR/autenticação existir |
 
-Todas herdam de `AppException` (abstrata, define `StatusCode`). O `ExceptionMiddleware` mapeia `AppException` → status certo + `LogWarning`; qualquer outra exception → 500 + `LogError`, sem vazar detalhe interno em produção.
+Todas herdam de `AppException` (abstrata, define `StatusCode`). O `GlobalExceptionHandler` (`IExceptionHandler`) mapeia `AppException` → status certo + `LogWarning`; qualquer outra exception → 500 + `LogError`, sem vazar detalhe interno em produção.
 
 ### 6.3 Middlewares
 
 - **`CorrelationIdMiddleware`** — gera/propaga `X-Correlation-Id`, injeta no contexto de log do Serilog.
-- **`ExceptionMiddleware`** — ponto único de tradução exception → HTTP (ProblemDetails RFC 7807).
+- **`GlobalExceptionHandler`** (`CrossCutting/Handlers`, `IExceptionHandler`) — ponto único de tradução exception → HTTP (ProblemDetails RFC 7807).
 - **`SecurityHeadersMiddleware`** — headers de segurança básicos (`X-Content-Type-Options`, `X-Frame-Options`, CSP).
 
 ---
@@ -396,8 +398,30 @@ O `NoWarn` evita que o compilador exija comentário em **todo** membro público 
 | Item | Situação |
 |---|---|
 | Validação de entrada (FluentValidation) | ✅ Conectada na Service (§5.4) |
-| Concorrência otimista (`Version`) | Removida da entidade `Produto` — reintroduzir por entidade, se necessário |
-| Auditoria (`CriadoEm`/`AtualizadoEm`) | Removida da entidade `Produto` — reintroduzir por entidade, se necessário |
-| Autenticação/Autorização | Não implementada ainda |
-| IDOR (posse de recurso) | `AcessoNegadoException` existe, mas nada a usa ainda |
-| Testes de integração | Placeholder apenas, sem Docker disponível no ambiente atual |
+| Concorrência otimista (`Version`) | ✅ `Produto` implementa `IEntidadeVersionada`; o cliente pode devolver `Version` na edição (409 se desatualizada) |
+| Auditoria (`CriadoEm`/`AtualizadoEm`) | ✅ `IEntidadeAuditavel`, preenchida pelo `MinhaApiDbContext` em UTC. Opcional por entidade |
+| Autenticação | ✅ JWT single-tenant (§12). Todo endpoint exige token, exceto login e `/health` |
+| IDOR (posse de recurso) | Single-tenant: todo usuário autenticado enxerga os mesmos dados. Se uma entidade passar a ter dono, valide a posse na Application e lance `AcessoNegadoException` |
+| Testes de integração | Fora do escopo por decisão (os testes unitários cobrem Domain, Application, hash e JWT) |
+
+---
+
+## 12. Autenticação (JWT, single-tenant)
+
+**Fluxo:** `POST /api/v1/auth/login` com `{ "email", "senha" }` devolve `{ "token", "expiraEm" }`. O cliente envia `Authorization: Bearer <token>` nas demais chamadas.
+
+- **Seguro por padrão:** `FallbackPolicy` exige usuário autenticado em TODO endpoint. Só o login e o `/health` são `[AllowAnonymous]`.
+- **Senha:** hash BCrypt (fator 12) em `Infra/Auth/BCryptSenhaHasher`. A senha nunca é guardada nem logada.
+- **Anti-enumeração:** usuário inexistente, senha errada e usuário inativo respondem **a mesma** `NaoAutenticadoException` (401). Para o tempo de resposta também não denunciar, a verificação do hash roda sempre (com um hash falso quando o e-mail não existe).
+- **Rate limit:** limite geral de 100/min por IP e, no login, 5/min por IP (429). Atrás de proxy, configure `UseForwardedHeaders` no deploy.
+- **Token:** HMAC-SHA256, claims `sub`, `email`, `jti`; emissor, audiência e validade conferidos. Expira em `Jwt:ExpiracaoMinutos` (60 por padrão).
+- **Configuração:** a chave é segredo e a API **não sobe** sem ela (mínimo 32 caracteres):
+  ```bash
+  dotnet user-secrets set "Jwt:Chave" "<texto-aleatorio-com-48+-caracteres>" --project src/MinhaApi.Api
+  ```
+  Fora de Development use a variável de ambiente `Jwt__Chave`.
+- **Primeiro usuário:** não existe cadastro aberto. Defina `Seed:AdminEmail` e `Seed:AdminSenha` (User Secrets ou variáveis `Seed__AdminEmail` / `Seed__AdminSenha`); na subida, se a tabela `USUARIO` estiver vazia, o administrador é criado. Depois remova a senha da configuração.
+- **Banco:** a tabela `USUARIO` vem do `minha-api-database` (versão 0.2.0, ticket API-0002).
+- **Swagger:** botão "Authorize" aceita o token.
+
+**Single-tenant:** há um único conjunto de dados; não existe `TenantId`. Se o template virar multi-tenant, adicione o tenant ao token e uma validação de posse em cada caso de uso (a defesa contra IDOR), e considere Global Query Filters do EF Core como camada extra.

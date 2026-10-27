@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using MinhaApi.Domain.Abstractions;
 using MinhaApi.Application.Produtos.DataTransfer.Requests;
@@ -8,6 +9,7 @@ namespace MinhaApi.Api.Controllers.V1.Produtos;
 
 [ApiController]
 [Route("api/v1/[controller]")]
+[Authorize]
 [Produces("application/json")]
 public class ProdutosController(IProdutoService produtoService) : ControllerBase
 {
