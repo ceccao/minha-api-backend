@@ -66,19 +66,20 @@ public static class ApiConfiguration
         app.UseHttpsRedirection();
         app.UseCors(CorsConfiguration.PoliticaPadrao);
         app.UseRateLimiter();
-        app.UseAuthentication();
-        app.UseAuthorization();
-
-
-        app.MapControllers();
-        app.MapHealthChecks("/health").AllowAnonymous();
-
-        // Swagger UI somente em desenvolvimento.
+        // Swagger (somente em Development) ANTES da autenticacao: a politica "todo endpoint exige
+        // login" tambem barraria o swagger.json e a tela do Swagger se viessem depois.
         if (app.Environment.IsDevelopment())
         {
             app.UseSwagger();
             app.UseSwaggerUI();
         }
+
+        app.UseAuthentication();
+        app.UseAuthorization();
+
+        app.MapControllers();
+        app.MapHealthChecks("/health").AllowAnonymous();
+        app.MapTokenDesenvolvimento();                // so existe em Development
 
         app.Lifetime.ApplicationStopping.Register(() =>
             Log.Information("Aplicacao esta parando - drenando requisicoes em andamento..."));

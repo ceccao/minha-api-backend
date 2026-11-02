@@ -425,3 +425,15 @@ O `NoWarn` evita que o compilador exija comentário em **todo** membro público 
 - **Swagger:** botão "Authorize" aceita o token.
 
 **Single-tenant:** há um único conjunto de dados; não existe `TenantId`. Se o template virar multi-tenant, adicione o tenant ao token e uma validação de posse em cada caso de uso (a defesa contra IDOR), e considere Global Query Filters do EF Core como camada extra.
+
+### 12.1 Token de desenvolvimento (Swagger sem login)
+
+Para usar o Swagger sem criar usuário nem fazer login, **somente em Development** existe `POST /api/v1/auth/token-desenvolvimento`:
+
+1. Abra `/swagger`, execute esse endpoint (não precisa de corpo) e copie o valor de `token`.
+2. Clique em **Authorize**, cole o token e confirme.
+3. Os demais endpoints passam a responder; sem o token continuam devolvendo 401.
+
+A rota **não é registrada** em Staging/Production (não existe lá). O usuário do token é só um objeto em memória (nada é lido nem gravado no banco) e o token vale `Jwt:ExpiracaoMinutos`. O login real (`/api/v1/auth/login`) continua disponível para quando for necessário.
+
+> O `UseSwagger` precisa ficar **antes** de `UseAuthentication`/`UseAuthorization` em `ApiConfiguration.UseApi`; depois deles, a política "todo endpoint exige login" barra o próprio Swagger.
