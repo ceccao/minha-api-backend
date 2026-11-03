@@ -19,6 +19,9 @@
     <PackageVersion Include="Microsoft.Extensions.Options.DataAnnotations" Version="10.0.11" />
     <PackageVersion Include="Microsoft.NET.Test.Sdk" Version="18.11.0" />
     <PackageVersion Include="NSubstitute" Version="6.2.0" />
+    <!-- MySqlConnector: o Pomelo 9.0.0 puxa a 2.4.0 (GHSA-473q-m89c-ghf8, corrigido na 2.6.1). Fixado
+         aqui ate o Pomelo atualizar a propria dependencia. -->
+    <PackageVersion Include="MySqlConnector" Version="2.6.2" />
     <PackageVersion Include="Pomelo.EntityFrameworkCore.MySql" Version="9.0.0" />
     <PackageVersion Include="Serilog.AspNetCore" Version="10.0.0" />
     <PackageVersion Include="Serilog.Enrichers.CorrelationId" Version="3.0.1" />
