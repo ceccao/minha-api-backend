@@ -1,10 +1,14 @@
 version: 2
 updates:
+  # Verificacao MENSAL. Cada PR do Dependabot roda o CI (build, testes e build da imagem
+  # Docker) e a protecao da branch main exige CI verde: nada entra se quebrar o projeto base.
   - package-ecosystem: "nuget"
     directory: "/"
-    schedule: { interval: "weekly" }
-    # EF Core e Pomelo precisam subir JUNTOS (mesmo major). Agrupar evita PRs
-    # separados que quebram o build individualmente.
+    schedule: { interval: "monthly" }
+    # Ignora versoes com menos de 7 dias de publicadas: da tempo de aparecerem problemas
+    # (ou uma versao comprometida) antes de chegarem ao projeto.
+    cooldown:
+      default-days: 7
     # EF Core e Pomelo ficam no major 9 ate o Pomelo lancar versao estavel para EF Core 10.
     # Atualizacoes minor e patch continuam chegando; major so por decisao manual.
     ignore:
@@ -13,13 +17,24 @@ updates:
       - dependency-name: "Pomelo.EntityFrameworkCore.MySql*"
         update-types: ["version-update:semver-major"]
     groups:
+      # EF Core e Pomelo precisam subir JUNTOS (mesmo major).
       efcore:
         patterns:
           - "Microsoft.EntityFrameworkCore*"
           - "Pomelo.EntityFrameworkCore.MySql*"
+      # Todo o resto (minor e patch) vem num PR so: o CI testa o conjunto inteiro de uma vez.
+      minor-e-patch:
+        update-types: ["minor", "patch"]
   - package-ecosystem: "github-actions"
     directory: "/"
-    schedule: { interval: "weekly" }
+    schedule: { interval: "monthly" }
+    cooldown:
+      default-days: 7
+    groups:
+      actions:
+        patterns: ["*"]
   - package-ecosystem: "docker"
     directory: "/src/MinhaApi.Api"
-    schedule: { interval: "weekly" }
+    schedule: { interval: "monthly" }
+    cooldown:
+      default-days: 7
