@@ -27,11 +27,9 @@ public class UnitOfWork(MinhaApiDbContext context) : IUnitOfWork
         }
         catch (DbUpdateConcurrencyException)
         {
-            // Outra operacao alterou ou apagou a linha. Limpa o contexto (o estado
-            // rastreado ficou desatualizado) e traduz para a exception do CrossCutting,
-            // que nao conhece o ORM.
+            // O estado rastreado ficou desatualizado: limpa e traduz para a exception do CrossCutting.
             context.ChangeTracker.Clear();
-            throw new ConflitoException("O recurso foi modificado por outra operação. Recarregue e tente novamente.");
+            throw new ConflitoException("O registro");
         }
         finally
         {

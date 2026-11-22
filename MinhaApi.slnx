@@ -6,10 +6,8 @@
     <Project Path="src/MinhaApi.Domain/MinhaApi.Domain.csproj" />
     <Project Path="src/MinhaApi.Infra/MinhaApi.Infra.csproj" />
     <Project Path="src/MinhaApi.IoC/MinhaApi.IoC.csproj" />
-    <Project Path="src/MinhaApi.Jobs/MinhaApi.Jobs.csproj" />
   </Folder>
   <Folder Name="/tests/">
-    <Project Path="tests/MinhaApi.Tests.Integration/MinhaApi.Tests.Integration.csproj" />
     <Project Path="tests/MinhaApi.Tests.Unit/MinhaApi.Tests.Unit.csproj" />
   </Folder>
 </Solution>

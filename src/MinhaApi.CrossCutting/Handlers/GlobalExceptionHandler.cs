@@ -7,9 +7,7 @@ using MinhaApi.CrossCutting.Exceptions;
 
 namespace MinhaApi.CrossCutting.Handlers;
 
-// Ponto unico de traducao exception -> HTTP -> log (IExceptionHandler, o padrao atual
-// do ASP.NET Core). Registrado com AddExceptionHandler e ativado por UseExceptionHandler.
-// Resposta sempre em ProblemDetails (RFC 7807) com traceId.
+// Traduz exception em ProblemDetails (RFC 7807) com traceId e registra o log.
 public partial class GlobalExceptionHandler(ILogger<GlobalExceptionHandler> logger, IHostEnvironment environment)
     : IExceptionHandler
 {
@@ -37,12 +35,7 @@ public partial class GlobalExceptionHandler(ILogger<GlobalExceptionHandler> logg
         };
         problemDetails.Extensions["traceId"] = httpContext.TraceIdentifier;
 
-        if (exception is EntidadeInvalidaException entidadeInvalida)
-        {
-            problemDetails.Extensions["errors"] = entidadeInvalida.Erros;
-        }
-
-        // Em producao, nunca expor stack trace, nome de tabela ou detalhe interno (README §6.3).
+        // Em produção, nunca expor stack trace nem detalhe interno.
         if (environment.IsDevelopment() && exception is not AppException)
         {
             problemDetails.Detail = exception.ToString();

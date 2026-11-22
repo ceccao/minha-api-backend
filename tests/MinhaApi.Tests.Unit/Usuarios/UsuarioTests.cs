@@ -2,7 +2,6 @@ using AwesomeAssertions;
 using MinhaApi.CrossCutting.Enums;
 using MinhaApi.CrossCutting.Exceptions;
 using MinhaApi.Domain.Usuarios.Entities;
-using Xunit;
 
 namespace MinhaApi.Tests.Unit.Usuarios;
 

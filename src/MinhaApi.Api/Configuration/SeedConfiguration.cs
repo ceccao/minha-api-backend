@@ -4,8 +4,6 @@ namespace MinhaApi.Api.Configuration;
 
 public static class SeedConfiguration
 {
-    // Cria o primeiro usuario quando a tabela esta vazia e Seed:AdminEmail / Seed:AdminSenha
-    // foram informados (User Secrets em dev; variavel de ambiente no primeiro deploy).
     public static async Task SeedAdminAsync(this WebApplication app)
     {
         var email = app.Configuration["Seed:AdminEmail"];

@@ -4,20 +4,13 @@ using Serilog;
 
 namespace MinhaApi.Api.Configuration;
 
-// Configuracao do que e HTTP/ASP.NET (a injecao de dependencia das camadas de negocio
-// fica no IoC). Dois passos, na ordem em que o Program.cs os chama:
-//   AddApi  -> registra servicos (antes do Build)
-//   UseApi  -> monta o pipeline de middlewares (depois do Build); A ORDEM IMPORTA.
 public static class ApiConfiguration
 {
     private const long LimiteCorpoRequisicaoBytes = 10 * 1024 * 1024; // 10 MB
 
     public static IServiceCollection AddApi(this IServiceCollection services, IConfiguration configuration, IHostEnvironment environment)
     {
-        // Validacao e feita explicitamente na Application (ProdutoService), nao por filtro
-        // automatico do MVC. SuppressAsyncSuffixInActionNames = false mantem o nome da
-        // action igual ao do metodo (com "Async"), senao nameof(RecuperarAsync) no
-        // CreatedAtAction nao bate com o nome real da rota.
+        // Mantém o sufixo Async no nome das actions (nameof(...) em CreatedAtAction depende disso).
         services.AddControllers(options => options.SuppressAsyncSuffixInActionNames = false);
 
         services.AddExceptionHandler<GlobalExceptionHandler>();
@@ -28,7 +21,6 @@ public static class ApiConfiguration
         services.AddAutenticacao();
         services.AddRateLimitConfigurado();
 
-        // Health check real: so responde Healthy se conseguir falar com o banco.
         services.AddHealthChecks()
             .AddMySql(configuration.GetConnectionString("MySql") ?? string.Empty, name: "mysql");
 
@@ -39,8 +31,7 @@ public static class ApiConfiguration
     {
         builder.Host.UseSerilog(CrossCutting.Logging.SerilogConfiguration.Configurar);
 
-        // Captive Dependency (README §7.6): em desenvolvimento, falha se um Singleton
-        // capturar algo Scoped (como o DbContext).
+        // Em desenvolvimento, falha se um Singleton capturar algo Scoped (como o DbContext).
         builder.Host.UseDefaultServiceProvider((contexto, opcoes) =>
         {
             opcoes.ValidateScopes = contexto.HostingEnvironment.IsDevelopment();
@@ -66,8 +57,7 @@ public static class ApiConfiguration
         app.UseHttpsRedirection();
         app.UseCors(CorsConfiguration.PoliticaPadrao);
         app.UseRateLimiter();
-        // Swagger (somente em Development) ANTES da autenticacao: a politica "todo endpoint exige
-        // login" tambem barraria o swagger.json e a tela do Swagger se viessem depois.
+        // O Swagger vem antes da autenticação: a política "todo endpoint exige login" barraria a tela dele.
         if (app.Environment.IsDevelopment())
         {
             app.UseSwagger();

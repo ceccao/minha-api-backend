@@ -23,7 +23,6 @@ public class JwtGeradorToken(IOptions<JwtOptions> opcoes) : IGeradorToken
             Issuer = _opcoes.Emissor,
             Audience = _opcoes.Audiencia,
             Expires = expiraEm,
-            // Claims minimas: quem e o usuario. Nada de dado pessoal alem do necessario.
             Subject = new ClaimsIdentity(
             [
                 new Claim(JwtRegisteredClaimNames.Sub, usuario.Id.ToString(CultureInfo.InvariantCulture)),

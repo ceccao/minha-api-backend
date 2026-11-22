@@ -4,10 +4,7 @@ using MinhaApi.Domain.Usuarios.Repositories;
 
 namespace MinhaApi.Application.Autenticacao.Services;
 
-// Cria o primeiro usuario quando nao existe nenhum (a API nao tem cadastro aberto).
-// So age se e-mail e senha forem informados (Seed:AdminEmail / Seed:AdminSenha, via User
-// Secrets ou variavel de ambiente) e a tabela estiver vazia. Depois do primeiro acesso,
-// remova a senha da configuracao.
+// Cria o primeiro usuário se a tabela estiver vazia e Seed:AdminEmail / Seed:AdminSenha forem informados.
 public class AdminSeedService(IUsuarioRepository usuarioRepository, ISenhaHasher senhaHasher, IUnitOfWork unitOfWork)
 {
     public async Task<bool> GarantirAdminAsync(string? email, string? senha, CancellationToken cancellationToken)

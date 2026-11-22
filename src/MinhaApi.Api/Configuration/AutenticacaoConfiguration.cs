@@ -13,8 +13,6 @@ public static class AutenticacaoConfiguration
     {
         services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme).AddJwtBearer();
 
-        // As opcoes do JwtBearer leem o JwtOptions (validado na subida), assim a chave
-        // existe em um lugar so e so e lida depois da configuracao estar completa.
         services.AddOptions<JwtBearerOptions>(JwtBearerDefaults.AuthenticationScheme)
             .Configure<IOptions<JwtOptions>>((bearer, jwt) =>
             {

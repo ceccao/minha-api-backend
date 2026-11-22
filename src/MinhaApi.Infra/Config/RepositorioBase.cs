@@ -5,8 +5,6 @@ using MinhaApi.Domain.Abstractions;
 
 namespace MinhaApi.Infra.Config;
 
-// Repositorio generico. As escritas so registram a mudanca no DbContext; a gravacao
-// acontece uma unica vez no UnitOfWork.CommitAsync.
 public class RepositorioBase<TEntidade>(MinhaApiDbContext context) : IRepositorioBase<TEntidade>
     where TEntidade : class
 {
@@ -22,8 +20,6 @@ public class RepositorioBase<TEntidade>(MinhaApiDbContext context) : IRepositori
 
     public virtual Task EditarAsync(TEntidade entidade, CancellationToken cancellationToken = default)
     {
-        // Se a entidade ja veio rastreada de um RecuperarAsync o Update e
-        // desnecessario, mas inofensivo.
         Context.Update(entidade);
         return Task.CompletedTask;
     }
@@ -40,7 +36,6 @@ public class RepositorioBase<TEntidade>(MinhaApiDbContext context) : IRepositori
         return Task.CompletedTask;
     }
 
-    // FindAsync consulta o cache do contexto antes de ir ao banco.
     public virtual async Task<TEntidade?> RecuperarAsync(int id, CancellationToken cancellationToken = default)
         => await Set.FindAsync([id], cancellationToken);
 
@@ -65,10 +60,7 @@ public class RepositorioBase<TEntidade>(MinhaApiDbContext context) : IRepositori
         return new PaginacaoConsulta<TEntidade>(itens, totalItens, pg, qt);
     }
 
-    // Monta a clausula no formato do System.Linq.Dynamic.Core (ex: "Preco descending").
-    // Diferente de SQL cru: o Dynamic.Core valida o campo como propriedade real de
-    // TEntidade antes de montar a expressao. Quais campos a API aceita ordenar e
-    // decidido pelo validator do request (Application).
+    // O Dynamic.Core valida o campo como propriedade real da entidade antes de montar a expressão.
     private static string ClausulaOrdenacao(string campo, TipoOrdenacao tipo)
         => $"{campo} {(tipo == TipoOrdenacao.Descendente ? "descending" : "ascending")}";
 }

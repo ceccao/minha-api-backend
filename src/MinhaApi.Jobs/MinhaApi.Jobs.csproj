@@ -1,7 +1,0 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
-
-  <ItemGroup>
-    <ProjectReference Include="..\MinhaApi.Application\MinhaApi.Application.csproj" />
-  </ItemGroup>
-
-</Project>

@@ -1,6 +1,5 @@
 using System.Linq.Expressions;
 using AwesomeAssertions;
-using MinhaApi.Application.Autenticacao;
 using MinhaApi.Application.Autenticacao.DataTransfer;
 using MinhaApi.Application.Autenticacao.Services;
 using MinhaApi.CrossCutting.Enums;
@@ -9,7 +8,6 @@ using MinhaApi.Domain.Abstractions;
 using MinhaApi.Domain.Usuarios.Entities;
 using MinhaApi.Domain.Usuarios.Repositories;
 using NSubstitute;
-using Xunit;
 
 namespace MinhaApi.Tests.Unit.Autenticacao;
 
@@ -22,7 +20,7 @@ public class AutenticacaoServiceTests
 
     public AutenticacaoServiceTests()
     {
-        _sut = new AutenticacaoService(_repositorio, _hasher, _gerador, new LoginRequestValidator());
+        _sut = new AutenticacaoService(_repositorio, _hasher, _gerador);
     }
 
     private static Usuario NovoUsuario() => new("Maria", "maria@teste.com", "hash-da-senha");

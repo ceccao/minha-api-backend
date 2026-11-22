@@ -6,7 +6,6 @@ using Microsoft.IdentityModel.Tokens;
 using MinhaApi.CrossCutting.Options;
 using MinhaApi.Domain.Usuarios.Entities;
 using MinhaApi.Infra.Auth;
-using Xunit;
 
 namespace MinhaApi.Tests.Unit.Autenticacao;
 

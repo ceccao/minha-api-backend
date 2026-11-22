@@ -10,7 +10,6 @@ public static class CrossCuttingDependencyInjection
     // AddExceptionHandler). Aqui ficam as opcoes compartilhadas entre camadas.
     public static IServiceCollection AddCrossCutting(this IServiceCollection services, IConfiguration config)
     {
-        // A API nao sobe sem uma chave JWT valida (>= 32 caracteres).
         services
             .AddOptions<JwtOptions>()
             .Bind(config.GetSection(JwtOptions.Secao))

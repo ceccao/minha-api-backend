@@ -43,6 +43,5 @@ public class Usuario
 
     public bool Ativo => Situacao == Situacao.Ativo;
 
-    // E-mail e sempre guardado e comparado em minusculas.
     public static string NormalizarEmail(string email) => email.Trim().ToLowerInvariant();
 }

@@ -3,11 +3,9 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
 using MinhaApi.Domain.Abstractions;
-using MinhaApi.Domain.Produtos.Repositories;
 using MinhaApi.Domain.Usuarios.Repositories;
 using MinhaApi.Infra.Auth;
 using MinhaApi.Infra.Config;
-using MinhaApi.Infra.Produtos.Repositories;
 using MinhaApi.Infra.Usuarios.Repositories;
 
 namespace MinhaApi.IoC;
@@ -23,14 +21,13 @@ public static class InfraDependencyInjection
             throw new InvalidOperationException("ConnectionStrings:MySql nao configurado.");
         }
 
-        // Unica fonte das configuracoes do MySQL; a API nao sobe se forem invalidas.
         services
             .AddOptions<MySqlOptions>()
             .Bind(config.GetSection(MySqlOptions.Secao))
             .ValidateDataAnnotations()
             .ValidateOnStart();
 
-        // DbContext: Scoped, UM por requisicao HTTP. NUNCA Singleton (README §7.1).
+        // Scoped: um DbContext por requisição.
         services.AddDbContext<MinhaApiDbContext>((provider, options) =>
         {
             var mySql = provider.GetRequiredService<IOptions<MySqlOptions>>().Value;
@@ -41,15 +38,11 @@ public static class InfraDependencyInjection
                 opcoes => opcoes.CommandTimeout(mySql.CommandTimeout));
         });
 
-        // UnitOfWork tambem Scoped - precisa usar o MESMO DbContext da requisicao,
-        // senao a transacao seria aberta num contexto diferente do que os
-        // repositorios estao usando.
+        // Scoped também: precisa do mesmo DbContext da requisição.
         services.AddScoped<IUnitOfWork, UnitOfWork>();
 
-        services.AddScoped<IProdutoRepository, ProdutoRepository>();
         services.AddScoped<IUsuarioRepository, UsuarioRepository>();
 
-        // Autenticacao: hash de senha (BCrypt) e emissao do JWT.
         services.AddSingleton<ISenhaHasher, BCryptSenhaHasher>();
         services.AddSingleton<IGeradorToken, JwtGeradorToken>();
 

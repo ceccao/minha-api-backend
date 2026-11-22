@@ -1,5 +1,4 @@
 using System.Threading.RateLimiting;
-using Microsoft.AspNetCore.RateLimiting;
 
 namespace MinhaApi.Api.Configuration;
 
@@ -16,7 +15,6 @@ public static class RateLimitConfiguration
         {
             options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
 
-            // Limite geral por IP, aplicado a TODAS as rotas.
             options.GlobalLimiter = PartitionedRateLimiter.Create<HttpContext, string>(contexto =>
                 RateLimitPartition.GetFixedWindowLimiter(ChaveDoCliente(contexto), _ => new FixedWindowRateLimiterOptions
                 {
@@ -25,7 +23,7 @@ public static class RateLimitConfiguration
                     QueueLimit = 0
                 }));
 
-            // Mais rigido no login (anti forca bruta). Vale ALEM do limite geral.
+            // Mais rígido no login (anti força bruta); vale além do limite geral.
             options.AddPolicy(PoliticaLogin, contexto =>
                 RateLimitPartition.GetFixedWindowLimiter(ChaveDoCliente(contexto), _ => new FixedWindowRateLimiterOptions
                 {
