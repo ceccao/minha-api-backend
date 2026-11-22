@@ -2,7 +2,7 @@
 
 ## Branches
 
-`feature/*` e `fix/*` → PR → `dev` → PR → `hml` → PR → `main`. `main` e `hml` exigem PR e CI verde.
+`feature/*` e `fix/*` → PR → `dev` → PR → `hml` → PR → `main`. As três branches exigem PR e CI verde.
 
 ## Commits
 
@@ -16,7 +16,7 @@ dotnet test
 dotnet list package --vulnerable --include-transitive
 ```
 
-O build falha em qualquer violação do `.editorconfig` (`TreatWarningsAsErrors`).
+O build falha em violações de nomenclatura, namespace e `using` do `.editorconfig` (`TreatWarningsAsErrors`). Regras de estilo são só sugestões.
 
 ## Mudança de schema
 
@@ -24,4 +24,4 @@ Um ticket que altera o banco muda **dois repositórios juntos**: o script SQL co
 
 ## Nova entidade
 
-Siga o checklist da seção 10 do `readme.md` da raiz.
+Siga o checklist da seção 9 do `readme.md` da raiz.

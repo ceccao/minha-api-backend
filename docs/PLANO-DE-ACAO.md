@@ -1,5 +1,7 @@
 # Plano de Ação — API Base Template (do zero absoluto)
 
+> ⚠️ **Registro histórico.** Este plano descreve como o template foi construído e **não reflete o estado atual**: depois dele o `Produto`, o `Version` e a auditoria, os validators, os projetos vazios e o `.template.config` foram removidos. Para o estado atual, veja o [readme.md](../readme.md).
+
 > **Ponto de partida:** notebook novo, apenas **VS Code** instalado.
 > **Ponto de chegada:** solution C# em camadas + MySQL em Docker + Liquibase + frontend Angular + repositório GitHub com CI, tudo rodando localmente e pronto para virar um `dotnet new` template.
 >
