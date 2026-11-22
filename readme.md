@@ -1,439 +1,190 @@
-# MinhaApi — Template Base de API em C#
+# MinhaApi — Template base de API em C#
 
-> **Propósito deste documento:** descrever a arquitetura, as tecnologias e os padrões **como eles realmente estão implementados hoje** — não como um plano teórico. Qualquer entidade nova a ser criada neste template deve seguir os mesmos padrões documentados aqui, usando `Produto` como referência viva.
+Template de API REST em .NET 10, em camadas, com EF Core + MySQL, autenticação JWT e CI no GitHub. Este documento descreve **como o código está hoje**. Para criar uma entidade nova, siga o checklist da seção 9.
+
+Repositórios do conjunto:
+
+| Repositório | Conteúdo |
+|---|---|
+| `minha-api-backend` | Esta solution (API, testes, `docs/`) |
+| `minha-api-database` | Schema do banco versionado com Liquibase |
+| `minha-api-frontend` | Frontend Angular |
 
 ---
 
-## 1. Visão Geral
-
-Template base de API REST em C#/.NET, organizado em camadas (Domain, Application, Infra, API, CrossCutting, IoC), com persistência via Entity Framework Core/MySQL. O projeto nasceu como estudo prático — várias decisões aqui foram tomadas deliberadamente de forma explícita (em vez de herdar comportamento de classes base "mágicas") para reforçar o entendimento de cada peça na hora de construir.
-
-**Entidade de referência:** `Produto` — implementa o CRUD completo (criar, editar, listar com filtro/paginação/ordenação, recuperar por id, excluir via soft delete) e serve de modelo para qualquer entidade nova.
-
----
-
-## 2. Stack Tecnológico
+## 1. Stack
 
 | Categoria | Tecnologia |
 |---|---|
-| Runtime | .NET 10 |
-| Web | ASP.NET Core (Controllers, não Minimal API) |
-| ORM | Entity Framework Core 9 (mapeamento por `IEntityTypeConfiguration`, sem EF Migrations) |
-| Provider MySQL | `Pomelo.EntityFrameworkCore.MySql` 9.x (traz o MySqlConnector) |
-| Banco | MySQL 8.x |
-| Mapeamento objeto-objeto | Mapster |
-| Validação | FluentValidation (injetado explicitamente no `ProdutoService` — ver §5.4) |
+| Runtime / Web | .NET 10, ASP.NET Core com Controllers |
+| ORM / banco | EF Core 9 + Pomelo (MySQL 8), sem EF Migrations |
+| Schema | Liquibase, no repositório `minha-api-database` |
+| Mapeamento | Mapster (estrito: todo par exige mapeamento explícito) |
 | Ordenação dinâmica | System.Linq.Dynamic.Core |
-| Logging | Serilog (console + arquivo JSON em produção, enrichment de Correlation ID) |
-| Documentação da API | Swashbuckle (Swagger/OpenAPI), com XML comments habilitado |
-| Rate limiting | `Microsoft.AspNetCore.RateLimiting` (nativo do .NET) |
-| Health checks | `AspNetCore.HealthChecks.MySql` |
+| Logs | Serilog (console em Development; console JSON + arquivo em Staging/Production) |
+| Documentação | Swashbuckle (Swagger), só em Development |
+| Segurança | JWT Bearer, BCrypt, rate limiting, CORS, cabeçalhos de segurança |
 | Testes | xUnit + AwesomeAssertions + NSubstitute |
-| Versionamento de schema | Liquibase (repositório separado `minha-api-database`) |
 
 ---
 
-## 3. Arquitetura de Camadas
+## 2. Como rodar
+
+Pré-requisitos: .NET SDK conforme o `global.json` e um MySQL 8 com o schema aplicado (veja o `README.md` do `minha-api-database`).
+
+Configure os segredos uma vez (User Secrets, nunca no `appsettings` versionado):
+
+```bash
+cd src/MinhaApi.Api
+dotnet user-secrets set "ConnectionStrings:MySql" "Server=localhost;Port=3306;Database=minha_api_dev;User=root;Password=***"
+dotnet user-secrets set "MySql:ServerVersion" "8.0.46"
+dotnet user-secrets set "Jwt:Chave" "<texto-aleatorio-com-48+-caracteres>"
+dotnet user-secrets set "Seed:AdminEmail" "admin@exemplo.com"
+dotnet user-secrets set "Seed:AdminSenha" "<senha-forte>"
+```
+
+Rode e abra o Swagger:
+
+```bash
+dotnet run --project src/MinhaApi.Api --launch-profile https
+```
+
+- Swagger: `https://localhost:7191/swagger` · health: `/health` · HTTP: `http://localhost:5014`.
+- O banco pode ser local ou remoto: a API só lê `ConnectionStrings:MySql`. Em Staging/Production use variáveis de ambiente (`ConnectionStrings__MySql`, `Jwt__Chave`, `Cors__OrigensPermitidas__0`...).
+- A API **não sobe** sem `Jwt:Chave` (mínimo de 32 caracteres) e, fora de Development, sem `Cors:OrigensPermitidas`.
+
+Testes e verificação antes de um PR:
+
+```bash
+dotnet build
+dotnet test
+```
+
+---
+
+## 3. Camadas
 
 ```
 src/
-├── MinhaApi.Api/            → Controllers, Program.cs, Swagger, configuração HTTP
-├── MinhaApi.Application/    → Orquestração: Requests/Responses, Profiles (Mapster), Services (wrapper de transação)
-├── MinhaApi.CrossCutting/   → Exceptions tipadas, Middlewares, Logging, Enums "universais"
-├── MinhaApi.Domain/         → Entidades, Commands, Domain Services (lógica de negócio), interfaces de Repository
-├── MinhaApi.Infra/          → DbContext, Mappings (`IEntityTypeConfiguration`), Repositories concretos, UnitOfWork
-├── MinhaApi.IoC/            → Composição da injeção de dependência
-└── MinhaApi.Jobs/           → Reservado para tarefas agendadas (ainda vazio)
+├── MinhaApi.Api/            Controllers, Program.cs, pipeline HTTP (Configuration/)
+├── MinhaApi.Application/    Casos de uso: transação, conversão de DTOs, autenticação
+├── MinhaApi.CrossCutting/   Exceptions, middlewares, logging, enums e opções compartilhadas
+├── MinhaApi.Domain/         Entidades, regras de negócio, contratos de repositório
+├── MinhaApi.Infra/          DbContext, mapeamentos, repositórios, UnitOfWork, hash e JWT
+└── MinhaApi.IoC/            Só injeção de dependência
 ```
 
-### 3.1 Regra de dependências (atual — revisada)
+Dependências: `CrossCutting ← Domain ← Application ← Infra`; a `Api` depende do `IoC`, que agrega tudo. O Domain referencia o CrossCutting (e não o contrário) porque usa o enum `Situacao` e as exceptions.
 
-```
-CrossCutting  ←  Domain  ←  Application  ←  Infra
-                              ↑
-                       API  ←  IoC (agrega tudo)
-```
-
-> ⚠️ **Diferente do desenho clássico de Clean Architecture:** aqui é o **Domain que referencia o CrossCutting** (não o contrário). Essa troca foi deliberada — o CrossCutting guarda o enum `Situacao` (§6), que é "universal" e precisa ser usado dentro do próprio Domain (na entidade `Produto`). Como um projeto não pode referenciar de volta quem já o referencia (ciclo, erro de build), a solução foi inverter a direção: `CrossCutting` não conhece mais o `Domain`, e o `Domain` passou a conhecer o `CrossCutting`.
->
-> **Consequência prática:** o `Domain` hoje pode lançar exceptions do CrossCutting diretamente (`NaoEncontradoException<T>`, por exemplo) — não precisa mais devolver `null` pra Application decidir o que fazer. Ver `ProdutoDomainService.ValidarAsync` (§5.3).
-
-### 3.2 O que NÃO existe (por decisão consciente)
-
-- **Nenhuma classe base de entidade** (tipo `EntidadeBase`). Cada entidade declara `Id`, e os campos que fizerem sentido pra ela, explicitamente. Ver §7 pra decidir o que replicar numa entidade nova.
-- **Nenhuma camada `DataTransfer` separada.** Requests/Responses vivem dentro de `Application/Produtos/DataTransfer/`.
+Não existe classe base de entidade: cada entidade declara o `Id` e os campos que fizerem sentido. Também não existe camada `DataTransfer` separada: Requests e Responses ficam dentro da Application, por funcionalidade.
 
 ---
 
-## 4. Domain — onde a lógica de negócio mora
+## 4. Domain
 
-### 4.1 Entidade (`Domain/Produtos/Entities/Produto.cs`)
-
-```csharp
-public class Produto
-{
-    public virtual int Id { get; protected set; }
-    public virtual string Nome { get; protected set; }
-    public virtual decimal Preco { get; protected set; }
-    public virtual Situacao Situacao { get; protected set; }
-
-    protected Produto() { }  // exigencia do EF Core (materializacao)
-
-    public Produto(string nome, decimal preco)
-    {
-        SetNome(nome);
-        SetPreco(preco);
-        Ativar();
-    }
-
-    public virtual void SetNome(string nome) { /* valida e atribui */ }
-    public virtual void SetPreco(decimal preco) { /* valida e atribui */ }
-    public virtual void Ativar() => Situacao = Situacao.Ativo;
-    public virtual void Inativar() => Situacao = Situacao.Inativo;
-}
-```
-
-**Convenções da entidade:**
-- Propriedades com `protected set` (o EF Core preenche por reflection). `virtual` é opcional: só seria exigido com `UseLazyLoadingProxies`, que não usamos.
-- Construtor sem parâmetros `protected` — só pra o EF Core instanciar a entidade ao ler do banco, nunca é chamado pelo código da aplicação.
-- Toda regra de invariante (nome obrigatório, tamanho, preço não-negativo) é validada **dentro dos próprios métodos** (`SetNome`/`SetPreco`), lançando `RegraDeNegocioException` (400) — a entidade não conhece nada além do próprio domínio.
-- Status via **enum** (`Situacao`), não `bool` — ver §6.
-
-> ⚠️ **Pendência conhecida:** esta entidade não tem campo de concorrência otimista (`Version`) nem auditoria (`CriadoEm`/`AtualizadoEm`). Se sua entidade nova precisar disso, adicione os campos manualmente e mapeie no `ProdutoMap`-equivalente (ver §8) — não existe mais nenhuma base que forneça isso de graça.
-
-### 4.2 Command (`Domain/Produtos/Commands/ProdutoCommand.cs`)
-
-```csharp
-public class ProdutoCommand
-{
-    public string Nome { get; protected set; }
-    public decimal Preco { get; protected set; }
-}
-```
-
-Um **único Command** serve tanto pra criação quanto pra edição (diferente de um modelo com `InserirXCommand`/`EditarXCommand` separados) — o `Id`, quando necessário, é passado como parâmetro à parte nos métodos do Domain Service, não dentro do Command.
-
-### 4.3 Domain Service (`Domain/Produtos/Services/ProdutoDomainService.cs`)
-
-**Esta é a camada que concentra a lógica de negócio de verdade** — não a Application. Depende só do `IProdutoRepository` (Domain) e, quando precisa, do `CrossCutting` (pra exceptions).
-
-```csharp
-public interface IProdutoDomainService
-{
-    Task<Produto> ValidarAsync(int id, CancellationToken cancellationToken);
-    Task<Produto> InserirAsync(ProdutoCommand command, CancellationToken cancellationToken);
-    Task<Produto> EditarAsync(int id, ProdutoCommand command, CancellationToken cancellationToken);
-    Task<Produto> AtivarAsync(int id, CancellationToken cancellationToken);
-    Task<Produto> InativarAsync(int id, CancellationToken cancellationToken);
-}
-```
-
-- **`ValidarAsync`** é o método central: busca a entidade no repositório e já lança `NaoEncontradoException<Produto>` se não achar — os outros métodos (`EditarAsync`, `AtivarAsync`, `InativarAsync`) reaproveitam ele por dentro, então "não encontrado" é tratado **uma vez só**.
-- Retorno é sempre `Task<Produto>` (não-nullable) — não devolve `null` pra Application decidir; quem não encontra, já lança a exception aqui mesmo.
-- "Excluir" não existe como conceito — é **`InativarAsync`** (soft delete via `Situacao`).
-
-### 4.4 Repository (interface) e Filtro de listagem
-
-```csharp
-public interface IProdutoRepository : IRepositorioBase<Produto>
-{
-    IQueryable<Produto> Filtrar(ProdutoListarFilter filtro);
-}
-
-public class ProdutoListarFilter
-{
-    public string Nome { get; set; }
-}
-```
-
-`IRepositorioBase<TEntidade>` (genérico, em `Domain/Abstractions/`) cobre o CRUD comum (`InserirAsync`, `EditarAsync`, `ExcluirAsync`, `RecuperarAsync` por id ou por predicado, `ListarAsync` paginado/ordenado). Quando uma entidade precisa de filtro de listagem com múltiplos critérios opcionais, ela ganha seu próprio `{Entidade}ListarFilter` + método `Filtrar()` na interface específica — devolvendo um `IQueryable<TEntidade>` que a Application usa em conjunto com a paginação (ver §5.2).
+- **Entidade** (`Domain/{Entidades}/Entities`): propriedades com `protected set`, construtor `protected` sem parâmetros (o EF Core o usa ao ler do banco) e um construtor público que valida e atribui. As regras de invariante ficam dentro da própria entidade e lançam `RegraDeNegocioException`. Referência: `Usuario`.
+- **Status** via enum `Situacao` (Ativo/Inativo), não `bool`. A exclusão é lógica: inativar.
+- **Command**: um único record por entidade, usado para criar e editar.
+- **Domain Service**: concentra a regra de negócio. Busca a entidade e lança `NaoEncontradoException` se não existir, em um método só que os demais reaproveitam.
+- **Repositório**: `IRepositorioBase<T>` cobre o CRUD comum (`InserirAsync`, `EditarAsync`, `ExcluirAsync`, `RecuperarAsync` por id ou predicado) e `ListarAsync(query, qt, pg, cpOrd, tpOrd)`, que recebe uma query já filtrada e só aplica ordenação e paginação. A entidade que precisa de filtros ganha uma interface própria com um método `Filtrar()` e uma classe de filtro.
+- **Paginação**: `PaginacaoFiltro` (`Qt`, `Pg`, `CpOrd`, `TpOrd`) na entrada, `PaginacaoConsulta<T>` na saída.
 
 ---
 
-## 5. Application — orquestração fina, sem lógica de negócio
+## 5. Application
 
-### 5.1 Contratos (Requests/Response)
+- O Service **valida a entrada, abre a transação e converte DTOs**. A regra de negócio fica no Domain.
+- A transação é explícita em cada método de escrita: `BeginTransaction`, chamada ao Domain Service, `CommitAsync`; em caso de erro, `RollbackAsync` e relança.
+- Consultas de leitura sem regra de negócio podem chamar o repositório direto.
+- Mapeamentos Mapster ficam em classes `IRegister` (Profile), encontradas automaticamente pelo `Scan` do IoC. Como o Mapster é estrito, esquecer um mapeamento falha na hora.
+- Validação de entrada simples é feita no Service ou na entidade e lança exception: não há validators separados.
 
-```
-Application/Produtos/DataTransfer/
-├── Requests/
-│   ├── ProdutoRequest.cs          (usado tanto pra criar quanto pra editar)
-│   └── ListarProdutosRequest.cs   (herda PaginacaoFiltro + campos de filtro)
-└── Responses/
-    └── ProdutoResponse.cs
-```
-
-- **Um único `ProdutoRequest`** pra Criar/Editar (em vez de dois DTOs separados) — mapeado direto pro `ProdutoCommand` via Mapster.
-- `ProdutoResponse` espelha exatamente os campos que a entidade tem hoje (`Id`, `Nome`, `Preco`, `Situacao`) — sem campo de auditoria, porque a entidade também não tem.
-
-### 5.2 Service da Application — só transação, validação de entrada e tradução
-
-```csharp
-public class ProdutoService(
-    IProdutoDomainService produtoDomainService,
-    IProdutoRepository produtoRepository,
-    IUnitOfWork unitOfWork) : IProdutoService
-{
-    public async Task<ProdutoResponse> InserirAsync(ProdutoRequest request, CancellationToken cancellationToken)
-    {
-        try
-        {
-            var command = request.Adapt<ProdutoCommand>();
-            unitOfWork.BeginTransaction();
-            var produto = await produtoDomainService.InserirAsync(command, cancellationToken);
-            await unitOfWork.CommitAsync(cancellationToken);
-            return produto.Adapt<ProdutoResponse>();
-        }
-        catch
-        {
-            await unitOfWork.RollbackAsync(cancellationToken);
-            throw;
-        }
-    }
-    // Editar/Excluir seguem o mesmo padrão: abre transação, chama o Domain Service, comita ou desfaz.
-}
-```
-
-**Regra da casa:** a abertura/commit/rollback da transação acontece **explicitamente dentro do método da Service**, não escondida atrás de um filtro ou middleware. Isso foi decisão deliberada — cada método de escrita mostra claramente o ciclo de vida da transação.
-
-**Listagem não passa pelo Domain Service** — é consulta pura, sem regra de negócio, então a Application chama o `IProdutoRepository` diretamente:
-
-```csharp
-public async Task<PaginacaoConsulta<ProdutoResponse>> ListarAsync(ListarProdutosRequest request, CancellationToken cancellationToken)
-{
-    var filter = request.Adapt<ProdutoListarFilter>();
-    var query = produtoRepository.Filtrar(filter);
-    var resultado = await produtoRepository.ListarAsync(query, request.Qt, request.Pg, request.CpOrd, request.TpOrd, cancellationToken);
-    return resultado.Adapt<PaginacaoConsulta<ProdutoResponse>>();
-}
-```
-
-### 5.3 Profile (Mapster)
-
-```csharp
-public class ProdutoProfile : IRegister
-{
-    public void Register(TypeAdapterConfig config)
-    {
-        config.NewConfig<Produto, ProdutoResponse>();
-        config.NewConfig<ProdutoRequest, ProdutoCommand>();
-    }
-}
-```
-
-Registrado via `TypeAdapterConfig.GlobalSettings.Scan(assembly)` na IoC — qualquer `IRegister` novo na Application é pego automaticamente.
-
-### 5.4 Validação de entrada
-
-Um único `ProdutoRequestValidator` (`AbstractValidator<ProdutoRequest>`) é registrado na DI e **injetado explicitamente** no `ProdutoService` (`FluentValidation.AspNetCore` foi descontinuado, então não há auto-validação do MVC). `InserirAsync` e `EditarAsync` validam o request antes de abrir a transação; se houver erro, lançam `EntidadeInvalidaException`, que o `GlobalExceptionHandler` devolve como **400** com a lista `errors`. A validação da própria entidade (`SetNome`/`SetPreco`) continua como segunda barreira de invariante.
 ---
 
 ## 6. CrossCutting
 
-### 6.1 `Situacao` — enum "universal"
+**Exceptions** (todas herdam de `AppException`, que define o status HTTP). Quem lança passa só o nome e a mensagem já vem pronta, exceto `RegraDeNegocioException`:
 
-```csharp
-public enum Situacao
-{
-    [Description("Inativo")] Inativo = 0,
-    [Description("Ativo")] Ativo = 1
-}
-```
-
-Vive no CrossCutting especificamente porque é usado em **todas as camadas** (Domain, Application, Infra) — é o único tipo do CrossCutting que o Domain conhece hoje (ver §3.1). Substitui o padrão clássico de `bool Ativo` — qualquer entidade nova que precisar de "ativo/inativo" deve usar este enum, não reinventar um booleano.
-
-### 6.2 Exceptions tipadas
-
-| Exception | Status HTTP | Quando usar |
+| Exception | HTTP | Exemplo de uso e mensagem |
 |---|---|---|
-| `NaoEncontradoException<T>` | 404 | Recurso não encontrado por id |
-| `EntidadeInvalidaException` | 400 | Validação de entrada falhou (lista de erros) |
-| `ConflitoException` | 409 | Concorrência otimista (`Version` desatualizada) |
-| `RegraDeNegocioException` | 400 | Regra de negócio violada (entidades e serviços) |
-| `NaoAutenticadoException` | 401 | Login inválido — mensagem sempre genérica |
-| `AcessoNegadoException` | 403 | Reservada pra quando IDOR/autenticação existir |
+| `NaoEncontradoException("Cliente")` | 404 | "Cliente não foi encontrado." |
+| `ConflitoException("Cliente")` | 409 | "Cliente foi modificado ou removido por outra operação. Recarregue e tente novamente." |
+| `EntidadeInvalidaException("E-mail")` | 400 | "E-mail é inválido." |
+| `AcessoNegadoException("Pedido")` | 403 | "Você não tem acesso a Pedido." |
+| `NaoAutenticadoException()` | 401 | "Credenciais inválidas." (fixa de propósito: não revela se o usuário existe) |
+| `RegraDeNegocioException("texto")` | 400 | Mensagem livre, para regras violadas |
 
-Todas herdam de `AppException` (abstrata, define `StatusCode`). O `GlobalExceptionHandler` (`IExceptionHandler`) mapeia `AppException` → status certo + `LogWarning`; qualquer outra exception → 500 + `LogError`, sem vazar detalhe interno em produção.
+O `GlobalExceptionHandler` traduz `AppException` em `ProblemDetails` (RFC 7807, com `traceId`) e registra um warning. Qualquer outra exceção vira 500 com mensagem genérica fora de Development, sem vazar detalhes.
 
-### 6.3 Middlewares
+**Middlewares:** `CorrelationIdMiddleware` (gera e propaga `X-Correlation-Id`) e `SecurityHeadersMiddleware` (cabeçalhos de segurança e CSP).
 
-- **`CorrelationIdMiddleware`** — gera/propaga `X-Correlation-Id`, injeta no contexto de log do Serilog.
-- **`GlobalExceptionHandler`** (`CrossCutting/Handlers`, `IExceptionHandler`) — ponto único de tradução exception → HTTP (ProblemDetails RFC 7807).
-- **`SecurityHeadersMiddleware`** — headers de segurança básicos (`X-Content-Type-Options`, `X-Frame-Options`, CSP).
+**Logs:** em Staging/Production gravam em `logs/minha-api-AAAAMMDD.json` e mantêm só os últimos 14 dias. A pasta `logs/` está no `.gitignore`.
 
 ---
 
 ## 7. Infra
 
-### 7.1 Mapeamento EF Core
-
-```csharp
-public class ProdutoConfiguration : IEntityTypeConfiguration<Produto>
-{
-    public void Configure(EntityTypeBuilder<Produto> builder)
-    {
-        builder.ToTable("PRODUTO");
-        builder.HasKey(x => x.Id);
-        builder.Property(x => x.Id).HasColumnName("ID").ValueGeneratedOnAdd();
-        builder.Property(x => x.Nome).HasColumnName("NOME").HasMaxLength(100).IsRequired();
-        builder.Property(x => x.Preco).HasColumnName("PRECO").HasPrecision(18, 2).IsRequired();
-        builder.Property(x => x.Situacao).HasColumnName("SITUACAO").HasConversion<int>().IsRequired();
-    }
-}
-```
-
-`Situacao` (enum) é mapeado como `int` via `.HasConversion<int>()`. O schema é do Liquibase: **nada de `dotnet ef migrations`, `Migrate()` ou `EnsureCreated()`**, e o EF Core não valida o schema na subida — divergência de nome de coluna só aparece na primeira query.
-
-> ⚠️ **Sem token de concorrência** — esta entidade não tem controle de concorrência otimista. Se sua entidade nova precisar (recomendado pra qualquer recurso editável concorrentemente), adicione o campo `Version` na entidade, mapeie com `.IsConcurrencyToken()` e incremente-o no `SaveChangesAsync` do `MinhaApiDbContext` (o EF Core não incrementa token `int` sozinho). O `RepositorioBase.EditarAsync` já traduz `DbUpdateConcurrencyException` em `ConflitoException`.
-
-### 7.2 `IUnitOfWork` / `UnitOfWork`
-
-```csharp
-public interface IUnitOfWork
-{
-    void BeginTransaction();                                        // sincrono - mantido assim por simplicidade
-    Task CommitAsync(CancellationToken cancellationToken = default);   // async de verdade - I/O com o banco
-    Task RollbackAsync(CancellationToken cancellationToken = default); // idem
-}
-```
-
-Registrado como **Scoped** — usa o mesmo `MinhaApiDbContext` da requisição (também Scoped).
-
-### 7.3 `RepositorioBase<TEntidade>`
-
-Implementação genérica de `IRepositorioBase<T>`. Ponto de destaque: o overload `ListarAsync(IQueryable<TEntidade> query, int qt, int pg, string cpOrd, TipoOrdenacao tpOrd, CancellationToken)` recebe uma query **já filtrada** (via `IProdutoRepository.Filtrar`) e só aplica paginação + ordenação por cima — separando claramente "filtrar" (responsabilidade da entidade específica) de "paginar/ordenar" (responsabilidade genérica).
-
-A ordenação dinâmica usa `System.Linq.Dynamic.Core` (`query.OrderBy("Preco descending")`) — valida o nome do campo via reflection antes de montar a query, evitando SQL Injection por concatenação de string.
+- `MinhaApiDbContext` é **Scoped** (um por requisição). O schema pertence ao Liquibase: nada de `dotnet ef migrations`, `Migrate()` ou `EnsureCreated()`. O EF Core não valida o schema na subida; nome de coluna divergente só estoura na primeira query.
+- Mapeamento por Fluent API (`IEntityTypeConfiguration<T>`), com nomes de tabela e coluna **iguais** ao SQL do Liquibase. Enums vão como `int` (`HasConversion<int>()`).
+- `UnitOfWork` (Scoped): transação e `SaveChangesAsync` em um único ponto. Traduz `DbUpdateConcurrencyException` em `ConflitoException`.
+- `RepositorioBase<T>`: as escritas só marcam a mudança; quem grava é o `CommitAsync`.
+- `MySqlOptions`: `ServerVersion` explícito e `CommandTimeout`.
+- `Auth/`: `BCryptSenhaHasher` e `JwtGeradorToken`.
 
 ---
 
 ## 8. API
 
-### 8.1 Controller
-
-```csharp
-[ApiController]
-[Route("api/v1/[controller]")]
-public class ProdutosController(IProdutoService produtoService) : ControllerBase
-{
-    /// <summary>
-    /// Cria um novo produto.
-    /// </summary>
-    [HttpPost]
-    public async Task<IActionResult> InserirAsync(ProdutoRequest request, CancellationToken cancellationToken)
-    {
-        var produto = await produtoService.InserirAsync(request, cancellationToken);
-        return CreatedAtAction(nameof(RecuperarAsync), new { id = produto.Id }, produto);
-    }
-}
-```
-
-**Convenções:**
-- `/// <summary>` em **toda** action — vira descrição no Swagger (precisa de `GenerateDocumentationFile` habilitado no `.csproj` + `IncludeXmlComments` no `SwaggerConfiguration`).
-- **Nenhum `.Adapt<>()` dentro do Controller** — o Controller só repassa o Request pra Application; toda conversão acontece lá dentro.
-- Nomes de método terminam em `Async` (`InserirAsync`, `RecuperarAsync`, etc.) — e por isso o `Program.cs` **precisa** desabilitar a convenção padrão do ASP.NET Core de remover o sufixo:
-
-```csharp
-// Sem isso, nameof(RecuperarAsync) dentro de CreatedAtAction nao bate com o nome
-// real da rota (que por padrao vira so "Recuperar") - "No route matches".
-builder.Services.AddControllers(options =>
-{
-    options.SuppressAsyncSuffixInActionNames = false;
-});
-```
-
-### 8.2 Swagger com XML comments
-
-`.csproj` da API precisa de:
-```xml
-<GenerateDocumentationFile>true</GenerateDocumentationFile>
-<NoWarn>$(NoWarn);1591</NoWarn>
-```
-O `NoWarn` evita que o compilador exija comentário em **todo** membro público do projeto (`MySqlOptions`, `CorsConfiguration`, etc.) — só documentamos as actions da controller, que é o que aparece no Swagger.
+- Controllers em `Controllers/V1/{Area}`, rota `api/v1/[controller]`, sem `.Adapt()` dentro do controller (a conversão acontece na Application).
+- Nomes de action terminam em `Async`; por isso `SuppressAsyncSuffixInActionNames = false`, senão o `nameof(...)` usado em `CreatedAtAction` não bate com a rota.
+- `/// <summary>` em cada action vira a descrição no Swagger (`GenerateDocumentationFile` ligado no `.csproj`).
+- O pipeline fica em `Configuration/ApiConfiguration.cs`. **A ordem importa:** o Swagger vem antes de `UseAuthentication`, senão a política "todo endpoint exige login" barra a própria tela do Swagger.
+- `GET /health` é público e só responde Healthy se conseguir falar com o MySQL.
 
 ---
 
-## 9. Testes
+## 9. Checklist: criar uma entidade nova
 
-- **Domain** (`ProdutoTests.cs`): testa a entidade isoladamente — construtor, `SetNome`/`SetPreco`, `Ativar`/`Inativar`, sem nenhum mock (não precisa, a entidade não tem dependência).
-- **Application** (`ProdutoServiceTests.cs`): mocka `IProdutoDomainService`, `IProdutoRepository` e `IUnitOfWork` (via NSubstitute) — testa que a Service chama o método certo do Domain Service, faz commit/rollback corretamente, e repropaga exceptions.
-- **Integração**: ainda não implementado (placeholder `UnitTest1.cs`) — fica pra quando houver Docker disponível (Testcontainers).
+Troque `{Entidade}` pelo nome (ex.: `Cliente`).
 
-**Padrão de mock de transação:** como `IUnitOfWork` é injetado e mockado, dá pra verificar que um método de escrita chamou `CommitAsync` (caminho feliz) ou `RollbackAsync` (quando o Domain Service lança exception) — ver `InserirAsyncQuandoDomainServiceLancaExceptionDeveFazerRollbackERepropagar`.
+1. **Banco** (`minha-api-database`): script em `scripts/{versão}/{TICKET}/script-01.sql` e `script-01-rollback.sql`, e o `changeSet` no changelog da versão.
+2. **Domain:** `{Entidade}` (propriedades `protected set`, construtor `protected` vazio, construtor real validando), `{Entidade}Command`, `I{Entidade}Repository` (herda `IRepositorioBase<T>`; acrescente `Filtrar()` se precisar de filtros) e `{Entidade}DomainService` com a interface.
+3. **Infra:** `{Entidade}Configuration` (mapeamento) e `{Entidade}Repository` (herda `RepositorioBase<T>`). Adicione o `DbSet` no `MinhaApiDbContext`.
+4. **Application:** Request, Response, `{Entidade}Profile` (Mapster) e `{Entidade}Service`.
+5. **API:** `Controllers/V1/{Entidades}/{Entidades}Controller.cs`.
+6. **IoC:** registrar o repositório (`InfraDependencyInjection`) e os services (`ApplicationDependencyInjection`).
+7. **Testes:** a entidade isolada e o Service com mocks.
 
----
+Decida por entidade se ela precisa de campos de auditoria (`CriadoEm`/`AtualizadoEm`) ou de controle de concorrência (`Version`): **nada disso vem pronto**. Se precisar, adicione os campos, mapeie (`IsConcurrencyToken()` para o `Version`) e preencha/incremente no `SaveChanges` do `DbContext`; o `UnitOfWork` já traduz o conflito.
 
-## 10. Checklist — como criar uma entidade nova seguindo este template
-
-1. **Domain:**
-   - `Entities/{Entidade}.cs` — propriedades `virtual` + `protected set`, construtor vazio `protected`, construtor real chamando os `SetX` de validação.
-   - Decida se precisa de `Situacao` (soft delete/status), `Version` (concorrência otimista) e/ou `CriadoEm`/`AtualizadoEm` (auditoria) — **nada disso vem de graça**, adicione manualmente se fizer sentido pro caso de uso.
-   - `Commands/{Entidade}Command.cs` — um Command só, reaproveitado pra criar/editar.
-   - `Repositories/I{Entidade}Repository.cs` — herda `IRepositorioBase<T>`; adicione `Filtrar()` + `{Entidade}ListarFilter` se a listagem precisar de múltiplos critérios opcionais.
-   - `Services/Interfaces/I{Entidade}sService.cs` + `Services/{Entidade}sService.cs` — método `ValidarAsync` central (busca + `NaoEncontradoException`), os demais reaproveitam ele.
-
-2. **Infra:**
-   - `Mappings/{Entidade}Configuration.cs` — `IEntityTypeConfiguration<T>` mapeando todas as colunas (enums como int via `.HasConversion<int>()`); o `MinhaApiDbContext` descobre sozinho. Os nomes de coluna precisam bater com o SQL do Liquibase.
-   - `Repositories/{Entidade}Repository.cs` — herda `RepositorioBase<T>`, implementa `Filtrar()` se existir.
-
-3. **Application:**
-   - `DataTransfer/Requests/{Entidade}Request.cs` (+ `Listar{Entidade}sRequest.cs` herdando `PaginacaoFiltro`).
-   - `DataTransfer/Responses/{Entidade}Response.cs`.
-   - `Profiles/{Entidade}Profile.cs` — configs de Mapster (`Entidade→Response`, `Request→Command`).
-   - `Services/{Entidade}Service.cs` — wrapper fino: valida (quando reconectado, ver §5.4), abre transação, chama o Domain Service, comita/desfaz, mapeia resposta.
-
-4. **API:**
-   - `Controllers/V1/{Entidades}Controller.cs` — sem `.Adapt()`, com `/// <summary>` em cada action.
-
-5. **IoC:** registrar `I{Entidade}sService`/`{Entidade}sService` e `I{Entidade}Repository`/`{Entidade}Repository`.
-
-6. **Banco:** novo script Liquibase criando a tabela (ver repositório `minha-api-database`).
-
-7. **Testes:** entidade isolada (Domain) + Service com mocks (Application), seguindo os mesmos exemplos de `Produto`.
+Campos `string` não anuláveis: o `Nullable` está ligado, e a forma de inicializar (`required`, `= null!`, `= string.Empty`, construtor ou `string?`) fica a critério de quem estiver codando.
 
 ---
 
-## 11. Débitos técnicos conhecidos (registrados de propósito, não esquecidos)
+## 10. Autenticação (JWT, single-tenant)
 
-| Item | Situação |
-|---|---|
-| Validação de entrada (FluentValidation) | ✅ Conectada na Service (§5.4) |
-| Concorrência otimista (`Version`) | ✅ `Produto` implementa `IEntidadeVersionada`; o cliente pode devolver `Version` na edição (409 se desatualizada) |
-| Auditoria (`CriadoEm`/`AtualizadoEm`) | ✅ `IEntidadeAuditavel`, preenchida pelo `MinhaApiDbContext` em UTC. Opcional por entidade |
-| Autenticação | ✅ JWT single-tenant (§12). Todo endpoint exige token, exceto login e `/health` |
-| IDOR (posse de recurso) | Single-tenant: todo usuário autenticado enxerga os mesmos dados. Se uma entidade passar a ter dono, valide a posse na Application e lance `AcessoNegadoException` |
-| Testes de integração | Fora do escopo por decisão (os testes unitários cobrem Domain, Application, hash e JWT) |
+Fluxo: `POST /api/v1/auth/login` com `{ "email", "senha" }` devolve `{ "token", "expiraEm" }`. O cliente envia `Authorization: Bearer <token>` nas demais chamadas.
+
+- **Seguro por padrão:** a `FallbackPolicy` exige usuário autenticado em todo endpoint. Só o login e o `/health` são públicos.
+- **Senha:** hash BCrypt (fator 12). A senha nunca é guardada nem logada.
+- **Anti-enumeração:** usuário inexistente, senha errada e usuário inativo respondem a mesma `NaoAutenticadoException`, e a verificação do hash roda sempre, para o tempo de resposta também não denunciar.
+- **Rate limit:** 100 requisições por minuto por IP e 5 por minuto no login (429). Atrás de proxy, configure `UseForwardedHeaders` no deploy.
+- **Token:** HMAC-SHA256 com `sub`, `email` e `jti`; emissor, audiência e validade conferidos; expira em `Jwt:ExpiracaoMinutos` (60 por padrão).
+- **Primeiro usuário:** não há cadastro aberto. Na subida, se a tabela `USUARIO` estiver vazia e `Seed:AdminEmail`/`Seed:AdminSenha` existirem, o administrador é criado. Depois, remova a senha da configuração.
+- **Swagger:** o botão **Authorize** aceita o token.
+
+**Token de desenvolvimento (só em Development):** `POST /api/v1/auth/token-desenvolvimento` devolve um token sem pedir login, para testar no Swagger. A rota não existe em Staging/Production.
+
+**Single-tenant:** todo usuário autenticado enxerga os mesmos dados. Se uma entidade passar a ter dono, valide a posse na Application e lance `AcessoNegadoException`; se o template virar multi-tenant, leve o tenant no token e valide a posse em cada caso de uso.
 
 ---
 
-## 12. Autenticação (JWT, single-tenant)
+## 11. Testes
 
-**Fluxo:** `POST /api/v1/auth/login` com `{ "email", "senha" }` devolve `{ "token", "expiraEm" }`. O cliente envia `Authorization: Bearer <token>` nas demais chamadas.
+`tests/MinhaApi.Tests.Unit` cobre o Domain (`Usuario`), a Application (`AutenticacaoService`), o hash, o JWT e as mensagens das exceptions. Não há testes de integração por decisão do projeto: o mapeamento do EF Core contra o schema só é validado ao rodar a API de verdade, então teste um CRUD novo pelo Swagger antes de confiar nele.
 
-- **Seguro por padrão:** `FallbackPolicy` exige usuário autenticado em TODO endpoint. Só o login e o `/health` são `[AllowAnonymous]`.
-- **Senha:** hash BCrypt (fator 12) em `Infra/Auth/BCryptSenhaHasher`. A senha nunca é guardada nem logada.
-- **Anti-enumeração:** usuário inexistente, senha errada e usuário inativo respondem **a mesma** `NaoAutenticadoException` (401). Para o tempo de resposta também não denunciar, a verificação do hash roda sempre (com um hash falso quando o e-mail não existe).
-- **Rate limit:** limite geral de 100/min por IP e, no login, 5/min por IP (429). Atrás de proxy, configure `UseForwardedHeaders` no deploy.
-- **Token:** HMAC-SHA256, claims `sub`, `email`, `jti`; emissor, audiência e validade conferidos. Expira em `Jwt:ExpiracaoMinutos` (60 por padrão).
-- **Configuração:** a chave é segredo e a API **não sobe** sem ela (mínimo 32 caracteres):
-  ```bash
-  dotnet user-secrets set "Jwt:Chave" "<texto-aleatorio-com-48+-caracteres>" --project src/MinhaApi.Api
-  ```
-  Fora de Development use a variável de ambiente `Jwt__Chave`.
-- **Primeiro usuário:** não existe cadastro aberto. Defina `Seed:AdminEmail` e `Seed:AdminSenha` (User Secrets ou variáveis `Seed__AdminEmail` / `Seed__AdminSenha`); na subida, se a tabela `USUARIO` estiver vazia, o administrador é criado. Depois remova a senha da configuração.
-- **Banco:** a tabela `USUARIO` vem do `minha-api-database` (versão 0.2.0, ticket API-0002).
-- **Swagger:** botão "Authorize" aceita o token.
+---
 
-**Single-tenant:** há um único conjunto de dados; não existe `TenantId`. Se o template virar multi-tenant, adicione o tenant ao token e uma validação de posse em cada caso de uso (a defesa contra IDOR), e considere Global Query Filters do EF Core como camada extra.
+## 12. Mais documentação
 
-### 12.1 Token de desenvolvimento (Swagger sem login)
-
-Para usar o Swagger sem criar usuário nem fazer login, **somente em Development** existe `POST /api/v1/auth/token-desenvolvimento`:
-
-1. Abra `/swagger`, execute esse endpoint (não precisa de corpo) e copie o valor de `token`.
-2. Clique em **Authorize**, cole o token e confirme.
-3. Os demais endpoints passam a responder; sem o token continuam devolvendo 401.
-
-A rota **não é registrada** em Staging/Production (não existe lá). O usuário do token é só um objeto em memória (nada é lido nem gravado no banco) e o token vale `Jwt:ExpiracaoMinutos`. O login real (`/api/v1/auth/login`) continua disponível para quando for necessário.
-
-> O `UseSwagger` precisa ficar **antes** de `UseAuthentication`/`UseAuthorization` em `ApiConfiguration.UseApi`; depois deles, a política "todo endpoint exige login" barra o próprio Swagger.
+Veja a pasta `docs/`: `ARQUITETURA.md`, `DECISOES.md` (por que cada escolha), `CONTRIBUINDO.md` (branches e PRs) e `HARDENING.md` (segurança).

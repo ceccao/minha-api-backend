@@ -1,6 +1,5 @@
 using AwesomeAssertions;
 using MinhaApi.Infra.Auth;
-using Xunit;
 
 namespace MinhaApi.Tests.Unit.Autenticacao;
 

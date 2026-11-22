@@ -4,7 +4,7 @@ using MinhaApi.Domain.Usuarios.Entities;
 
 namespace MinhaApi.Infra.Usuarios.Mappings;
 
-// Nomes batem com o SQL do Liquibase (minha-api-database, API-0002).
+// Nomes batem com o SQL do Liquibase (minha-api-database, API-0001).
 public class UsuarioConfiguration : IEntityTypeConfiguration<Usuario>
 {
     public void Configure(EntityTypeBuilder<Usuario> builder)

@@ -4,10 +4,8 @@ using MinhaApi.Domain.Usuarios.Entities;
 
 namespace MinhaApi.Api.Configuration;
 
-// Token de DESENVOLVIMENTO para usar no Swagger (botao "Authorize") sem passar pelo login.
-// O endpoint so e registrado quando o ambiente e Development: em Staging/Production a rota
-// nao existe (404), entao nao ha como gerar token sem credenciais fora da maquina do dev.
-// O usuario do token e apenas um objeto em memoria: nada e lido nem gravado no banco.
+// Token de desenvolvimento para o botão "Authorize" do Swagger sem passar pelo login.
+// Só é registrado em Development (nos demais ambientes a rota não existe).
 public static class TokenDesenvolvimentoConfiguration
 {
     public const string Rota = "/api/v1/auth/token-desenvolvimento";

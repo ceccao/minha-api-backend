@@ -7,7 +7,6 @@ namespace MinhaApi.CrossCutting.Logging;
 
 public static class SerilogConfiguration
 {
-    // Chamado no Program.cs como: builder.Host.UseSerilog(SerilogConfiguration.Configurar);
     public static void Configurar(HostBuilderContext context, LoggerConfiguration loggerConfig)
     {
         loggerConfig
@@ -26,12 +25,11 @@ public static class SerilogConfiguration
             loggerConfig
                 .MinimumLevel.Information()
                 .WriteTo.Console(new JsonFormatter())
-                .WriteTo.File(new JsonFormatter(), "logs/minha-api-.json", rollingInterval: RollingInterval.Day);
+                .WriteTo.File(
+                    new JsonFormatter(),
+                    "logs/minha-api-.json",
+                    rollingInterval: RollingInterval.Day,
+                    retainedFileCountLimit: 14);
         }
-
-        // TODO (LGPD - README §6.4): quando entidades com dados pessoais existirem
-        // (CPF, email, telefone), adicionar uma politica de destructuring/masking
-        // aqui antes de logar objetos completos. Ate la, nunca fazer log de entidade
-        // crua - sempre projetar pra DTO antes de logar.
     }
 }
